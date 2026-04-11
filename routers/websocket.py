@@ -8,19 +8,20 @@ from models.schemas import WSGameStart, WSOpponentLeft, WSType, PlayerState
 router = APIRouter()
 
 
-def _to_player_state(p: dict, combat_player: dict = None) -> PlayerState:
-    """Convert a room player entry into `PlayerState`."""
+def _to_player_state(player: dict, combat_player: dict = None) -> PlayerState:
+    """Convert a room player entry into PlayerState for WebSocket messages."""
     return PlayerState(
-        name=p["name"],
-        character_id=p["character_id"],
-        profile_image_url=p.get("profile_image_url"),
-        hp=combat_player["hp"] if combat_player else p.get("hp", 100),
-        special_gauge=(
-            combat_player["special_gauge"]
-            if combat_player
-            else p.get("special_gauge", 0)
-        ),
+        name=player["name"],
+        character_id=player["character_id"],
+        profile_image_url=player.get("profile_image_url"),
+        hp=combat_player["hp"] if combat_player else 100,
+        special_gauge=combat_player["special_gauge"] if combat_player else 0,
     )
+
+
+def _get_players_list(room: dict) -> list[dict]:
+    """Get [owner, guest] as a list for combat system compatibility."""
+    return [room["owner"], room["guest"]]
 
 
 @router.websocket("/ws/{room_code}")
@@ -31,16 +32,20 @@ async def websocket_game(websocket: WebSocket, room_code: str):
 
     room = rooms[room_code]
 
-    # Both players must have confirmed via HTTP before WebSocket connect
-    if not all(p.get("confirmed") for p in room["players"]):
+    if room["guest"] is None:
+        await websocket.close(code=4001, reason="Room not full yet")
+        return
+
+    if not (room["owner"]["confirmed"] and room["guest"]["confirmed"]):
         await websocket.close(code=4001, reason="Both players must confirm before connecting")
         return
 
     await websocket.accept()
 
-    # Attach the WebSocket to the first empty player slot
+    # Determine which player is connecting (owner=0, guest=1)
+    players = _get_players_list(room)
     player_index = None
-    for i, p in enumerate(room["players"]):
+    for i, p in enumerate(players):
         if p["ws"] is None:
             p["ws"] = websocket
             player_index = i
@@ -52,13 +57,9 @@ async def websocket_game(websocket: WebSocket, room_code: str):
 
     opponent_index = 1 - player_index
 
-    # When both players have WebSocket connected → init combat and send GAME_START
-    if (
-        len(room["players"]) == 2
-        and room["players"][opponent_index]["ws"] is not None
-        and "combat" not in room
-    ):
-        room["combat"] = init_combat_state(room["players"])
+    # When both WebSocket connected → init combat and send GAME_START
+    if players[opponent_index]["ws"] is not None and "combat" not in room:
+        room["combat"] = init_combat_state(players)
         room["combat"]["start_time"] = time.time()
         room["status"] = "playing"
 
@@ -69,10 +70,10 @@ async def websocket_game(websocket: WebSocket, room_code: str):
             msg = WSGameStart(
                 type=WSType.GAME_START,
                 player_index=idx,
-                me=_to_player_state(room["players"][idx], combat_me),
-                opponent=_to_player_state(room["players"][opp_idx], combat_opp),
+                me=_to_player_state(players[idx], combat_me),
+                opponent=_to_player_state(players[opp_idx], combat_opp),
             )
-            await room["players"][idx]["ws"].send_json(msg.model_dump())
+            await players[idx]["ws"].send_json(msg.model_dump())
 
     try:
         while True:
@@ -86,11 +87,9 @@ async def websocket_game(websocket: WebSocket, room_code: str):
             msg_type = message.get("type")
             action = message.get("action")
 
-            # Process combat actions
             if msg_type == "player_action" and action and "combat" in room:
                 result = process_action(room["combat"], player_index, action)
 
-                # Send the attack result to the attacker
                 attacker_msg = {
                     "type": "action_result",
                     "action": action,
@@ -105,11 +104,7 @@ async def websocket_game(websocket: WebSocket, room_code: str):
                 }
                 await websocket.send_json(attacker_msg)
 
-                # Send the hit result to the defender
-                if (
-                    len(room["players"]) > opponent_index
-                    and room["players"][opponent_index]["ws"]
-                ):
+                if players[opponent_index]["ws"]:
                     defender_msg = {
                         "type": "hit_received",
                         "action": action,
@@ -122,9 +117,8 @@ async def websocket_game(websocket: WebSocket, room_code: str):
                         "my_gauge": result["defender_gauge"],
                         "opponent_gauge": result["attacker_gauge"],
                     }
-                    await room["players"][opponent_index]["ws"].send_json(defender_msg)
+                    await players[opponent_index]["ws"].send_json(defender_msg)
 
-                # Handle KO
                 if result["ko"]:
                     winner_idx = result["ko_winner"]
                     loser_idx = 1 - winner_idx
@@ -133,35 +127,28 @@ async def websocket_game(websocket: WebSocket, room_code: str):
                     game_end_msg = {
                         "type": "game_end",
                         "winner_index": winner_idx,
-                        "winner_name": room["players"][winner_idx]["name"],
-                        "loser_name": room["players"][loser_idx]["name"],
+                        "winner_name": players[winner_idx]["name"],
+                        "loser_name": players[loser_idx]["name"],
                         "duration_seconds": duration,
                     }
 
                     for idx in range(2):
-                        if room["players"][idx]["ws"]:
-                            await room["players"][idx]["ws"].send_json(game_end_msg)
+                        if players[idx]["ws"]:
+                            await players[idx]["ws"].send_json(game_end_msg)
 
                     room["status"] = "finished"
 
             else:
-                # Relay other messages as-is
-                if (
-                    len(room["players"]) > opponent_index
-                    and room["players"][opponent_index]["ws"]
-                ):
-                    await room["players"][opponent_index]["ws"].send_json(message)
+                if players[opponent_index]["ws"]:
+                    await players[opponent_index]["ws"].send_json(message)
 
     except WebSocketDisconnect:
-        room["players"][player_index]["ws"] = None
+        players[player_index]["ws"] = None
         room["status"] = "finished"
 
-        if (
-            len(room["players"]) > opponent_index
-            and room["players"][opponent_index]["ws"]
-        ):
+        if players[opponent_index]["ws"]:
             msg = WSOpponentLeft(type=WSType.OPPONENT_LEFT)
-            await room["players"][opponent_index]["ws"].send_json(msg.model_dump())
+            await players[opponent_index]["ws"].send_json(msg.model_dump())
 
-        if all(p["ws"] is None for p in room["players"]):
+        if all(p["ws"] is None for p in players):
             del rooms[room_code]

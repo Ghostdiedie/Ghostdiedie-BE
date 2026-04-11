@@ -60,12 +60,6 @@ class PlayerState(BaseModel):
     special_gauge: int  = 0
 
 
-class RoomResponse(BaseModel):
-    """Response for room create."""
-    room_code: str
-    status: RoomStatus
-    players: list[PlayerState]
-
 
 # ── Match ─────────────────────────────────────────────────────────────────────
 

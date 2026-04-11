@@ -1,121 +1,123 @@
 import time
 from fastapi import APIRouter, HTTPException, Depends, Query
 from core.auth import verify_api_key
-from models.schemas import RoomResponse, RoomStatus, PlayerState
 from services.room_manager import rooms, generate_room_code, ROOM_EXPIRE_SECONDS
-from services.combat import get_character_stats
+from services.user_manager import get_user
 
 router = APIRouter(tags=["Rooms"])
 
 
-@router.get("/api/room/create", response_model=RoomResponse)
+def _user_info(player: dict, role: str) -> dict:
+    """Return clean user info for response."""
+    return {
+        "user_id": player["user_id"],
+        "name": player["name"],
+        "profile_image_url": player["profile_image_url"],
+        "role": role,  # "owner" or "guest"
+    }
+
+
+@router.get("/api/room/create")
 def create_room(
-    player_name: str = Query(...),
+    user_id: str = Query(...),
     character_id: int = Query(...),
-    profile_image_url: str = Query(None),
     _: str = Depends(verify_api_key),
 ):
-    """Create a room and return its 8-digit room code."""
+    """Owner creates a room. Returns room code and owner info."""
+    user = get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found. Register first.")
+
     code = generate_room_code()
-    stats = get_character_stats(character_id)
     rooms[code] = {
-        "status": RoomStatus.WAITING,
+        "status": "waiting",
         "created_at": time.time(),
-        "players": [
-            {
-                "name": player_name,
-                "character_id": character_id,
-                "profile_image_url": profile_image_url,
-                "hp": stats["hp"],
-                "special_gauge": stats["special_gauge"],
-                "ws": None,
-                "confirmed": False,
-            }
-        ],
+        "owner": {
+            **user,
+            "character_id": character_id,
+            "confirmed": False,
+            "ws": None,
+        },
+        "guest": None,
     }
 
     return {
-        "room_code": code,
-        "status": RoomStatus.WAITING,
-        "players": [
-            PlayerState(
-                name=player_name,
-                character_id=character_id,
-                profile_image_url=profile_image_url,
-                hp=stats["hp"],
-                special_gauge=stats["special_gauge"],
-            )
-        ],
+        "code": code,
+        "owner": _user_info(user, "owner"),
+        "expires_in": ROOM_EXPIRE_SECONDS,
     }
 
 
 @router.get("/api/room/join")
 def join_room(
     code: str = Query(...),
-    player_name: str = Query(...),
+    user_id: str = Query(...),
     character_id: int = Query(...),
-    profile_image_url: str = Query(None),
     _: str = Depends(verify_api_key),
 ):
-    """Join an existing room by code. Returns success."""
+    """Guest joins a room by code. Returns both players' info."""
+    user = get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found. Register first.")
+
     if code not in rooms:
         raise HTTPException(status_code=404, detail="Room not found")
+
     room = rooms[code]
-    if time.time() - room.get("created_at", 0) > ROOM_EXPIRE_SECONDS:
+
+    if time.time() - room["created_at"] > ROOM_EXPIRE_SECONDS and room["status"] != "playing":
         del rooms[code]
-        raise HTTPException(status_code=410, detail="Room has expired. Please create a new room.")
-    if len(room["players"]) >= 2:
+        raise HTTPException(status_code=410, detail="Room expired")
+
+    if room["guest"] is not None:
         raise HTTPException(status_code=400, detail="Room is full")
 
-    stats = get_character_stats(character_id)
-    room["players"].append(
-        {
-            "name": player_name,
-            "character_id": character_id,
-            "profile_image_url": profile_image_url,
-            "hp": stats["hp"],
-            "special_gauge": stats["special_gauge"],
-            "ws": None,
-            "confirmed": False,
-        }
-    )
-    room["status"] = RoomStatus.READY
+    room["guest"] = {
+        **user,
+        "character_id": character_id,
+        "confirmed": False,
+        "ws": None,
+    }
+    room["status"] = "ready"
 
-    return {"success": True, "room_code": code, "message": "Joined room successfully"}
+    return {
+        "success": True,
+        "code": code,
+        "owner": _user_info(room["owner"], "owner"),
+        "guest": _user_info(user, "guest"),
+    }
 
 
 @router.get("/api/room/confirm")
 def confirm_room(
     code: str = Query(...),
-    player_index: int = Query(..., ge=0, le=1),
+    user_id: str = Query(...),
     _: str = Depends(verify_api_key),
 ):
-    """
-    Confirm readiness for a player.
-    Both players must call this. When both confirm, game can start.
-    """
+    """Player confirms readiness. When both confirm, game can start."""
     if code not in rooms:
         raise HTTPException(status_code=404, detail="Room not found")
+
     room = rooms[code]
-    if len(room["players"]) < 2:
-        raise HTTPException(status_code=400, detail="Waiting for opponent to join")
-    if player_index >= len(room["players"]):
-        raise HTTPException(status_code=400, detail="Invalid player_index")
 
-    room["players"][player_index]["confirmed"] = True
+    if room["guest"] is None:
+        raise HTTPException(status_code=400, detail="Waiting for guest to join")
 
-    both_confirmed = all(p["confirmed"] for p in room["players"])
+    if room["owner"]["user_id"] == user_id:
+        room["owner"]["confirmed"] = True
+    elif room["guest"]["user_id"] == user_id:
+        room["guest"]["confirmed"] = True
+    else:
+        raise HTTPException(status_code=403, detail="You are not in this room")
+
+    both_confirmed = room["owner"]["confirmed"] and room["guest"]["confirmed"]
 
     if both_confirmed:
-        room["status"] = RoomStatus.PLAYING
+        room["status"] = "confirmed"
 
     return {
-        "success": True,
-        "room_code": code,
-        "player_index": player_index,
         "confirmed": True,
         "both_confirmed": both_confirmed,
-        "message": "Game starting!" if both_confirmed else "Waiting for opponent to confirm",
     }
 
 
@@ -124,33 +126,30 @@ def get_room_status(
     code: str = Query(...),
     _: str = Depends(verify_api_key),
 ):
-    """Check room status (for polling confirm state, etc.)."""
+    """Poll room state."""
     if code not in rooms:
         raise HTTPException(status_code=404, detail="Room not found")
+
     room = rooms[code]
-    elapsed = time.time() - room.get("created_at", time.time())
+    elapsed = time.time() - room["created_at"]
     remaining = max(0, ROOM_EXPIRE_SECONDS - int(elapsed))
 
-    if remaining == 0 and room.get("status") != RoomStatus.PLAYING:
+    if remaining == 0 and room["status"] not in ("playing", "confirmed"):
         del rooms[code]
-        raise HTTPException(status_code=410, detail="Room has expired.")
+        raise HTTPException(status_code=410, detail="Room expired")
 
-    players = [
-        {
-            "name": p["name"],
-            "character_id": p["character_id"],
-            "profile_image_url": p.get("profile_image_url"),
-            "confirmed": p.get("confirmed", False),
-        }
-        for p in room["players"]
-    ]
-
-    both_confirmed = len(room["players"]) == 2 and all(p.get("confirmed") for p in room["players"])
-
-    return {
-        "room_code": code,
+    result = {
+        "code": code,
         "status": room["status"],
-        "players": players,
-        "both_confirmed": both_confirmed,
-        "expires_in_seconds": remaining,
+        "owner": _user_info(room["owner"], "owner"),
+        "both_confirmed": False,
+        "expires_in": remaining,
     }
+
+    if room["guest"]:
+        result["guest"] = _user_info(room["guest"], "guest")
+        result["both_confirmed"] = room["owner"]["confirmed"] and room["guest"]["confirmed"]
+    else:
+        result["guest"] = None
+
+    return result
