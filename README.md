@@ -72,7 +72,7 @@ Supabase SQL Editor에서 `schema.sql` 실행하면 테이블 생성됨.
 
 ### React Native에서 호출 예시
 ```js
-const API = "https://api.도메인.com"; // 배포 후 주소로 변경
+const API = "https://api.ghostdiedie.club";
 
 // 캐릭터 목록
 const res = await fetch(`${API}/api/characters`);
@@ -93,4 +93,4 @@ await fetch(`${API}/api/matches`, {
 
 ## 배포
 - **플랫폼:** Railway
-- **도메인:** GoDaddy → CNAME으로 Railway 도메인 연결
+- **도메인:** `api.ghostdiedie.club` (GoDaddy → CNAME으로 Railway 연결)
