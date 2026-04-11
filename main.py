@@ -14,33 +14,24 @@ app = FastAPI(
     description="""
 Fighting game backend server with motion-based real-time battles
 
-## Game Flow
-1. `POST /api/rooms` -> create a room and receive a 4-character code
-2. `POST /api/rooms/{code}/join` -> the opponent joins the room
-3. `WebSocket /ws/{code}` -> `game_start` is sent when both players connect
-4. CV motion detection sends `player_action` -> the server calculates damage
-5. When HP reaches 0, `game_end` is sent
+## Game Flow (HTTP → WebSocket)
+1. `GET /api/room/create?player_name=...&character_id=...` → 8-digit room code
+2. `GET /api/room/join?code=...&player_name=...&character_id=...` → join room
+3. `GET /api/room/confirm?code=...&player_index=0` → both players confirm
+4. `GET /api/room/status?code=...` → poll confirm/game state
+5. `WebSocket /ws/{code}` → both connect after confirm → `game_start` sent
+6. CV motion detection sends `player_action` → server calculates damage
+7. When HP reaches 0, `game_end` is sent
 
-## Combat System
-| Action | Effect |
-|---|---|
-| `right punch` / `left punch` | Base damage (character attack stat) |
-| `kick` | 1.2x damage |
-| `block` | Defend (50% reduced incoming damage, +5 gauge) |
-| `special` | Special move (costs 100 gauge, deals 3x damage) |
-| `jump` / `walk` | Movement (no damage) |
+## HTTP Endpoints (query parameters, low overhead)
+- **room/create** — create room, get 8-digit code
+- **room/join** — join by code
+- **room/confirm** — each player confirms readiness
+- **room/status** — poll room state
 
-- **First-hit bonus**: damage is multiplied by 1.5 if the opponent has not attacked within 0.3 seconds
-- **Gauge charge**: +15 on attack, +5 on defense
-
-## WebSocket Message Types
-| Type | Direction | Description |
-|---|---|---|
-| `game_start` | server -> client | Game start (both players' info) |
-| `action_result` | server -> attacker | Your attack result (damage, HP, gauge) |
-| `hit_received` | server -> defender | Result of getting hit (damage, HP, gauge) |
-| `game_end` | server -> both | KO -> winner, loser, duration |
-| `opponent_left` | server -> client | Opponent disconnected |
+## WebSocket (real-time combat only)
+- Connect after both players confirmed
+- `game_start`, `action_result`, `hit_received`, `game_end`, `opponent_left`
 """,
 )
 

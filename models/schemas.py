@@ -60,20 +60,8 @@ class PlayerState(BaseModel):
     special_gauge: int  = 0
 
 
-class RoomCreate(BaseModel):
-    player_name: str
-    character_id: int
-    profile_image_url: Optional[str] = None
-
-
-class RoomJoin(BaseModel):
-    player_name: str
-    character_id: int
-    profile_image_url: Optional[str] = None
-
-
 class RoomResponse(BaseModel):
-    """Response for room fetch, create, and join."""
+    """Response for room create."""
     room_code: str
     status: RoomStatus
     players: list[PlayerState]
@@ -97,14 +85,6 @@ class MatchResponse(BaseModel):
 
 
 # ── WebSocket Messages ────────────────────────────────────────────────────────
-
-class WSOpponentJoined(BaseModel):
-    """Sent to both players when the opponent connects to WebSocket."""
-    type: Literal[WSType.OPPONENT_JOINED]
-    player_index: int       # From the receiver's perspective: 0 = P1 (left), 1 = P2 (right)
-    me: PlayerState
-    opponent: PlayerState
-
 
 class WSGameStart(BaseModel):
     """Sent when both players finish connecting over WebSocket."""

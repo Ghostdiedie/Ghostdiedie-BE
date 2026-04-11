@@ -3,7 +3,7 @@ import time
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from services.room_manager import rooms
 from services.combat import init_combat_state, process_action
-from models.schemas import WSGameStart, WSOpponentLeft, WSGameEnd, WSType, PlayerState
+from models.schemas import WSGameStart, WSOpponentLeft, WSType, PlayerState
 
 router = APIRouter()
 
@@ -25,12 +25,17 @@ def _to_player_state(p: dict, combat_player: dict = None) -> PlayerState:
 
 @router.websocket("/ws/{room_code}")
 async def websocket_game(websocket: WebSocket, room_code: str):
-    room_code = room_code.upper()
     if room_code not in rooms:
         await websocket.close(code=4004, reason="Room not found")
         return
 
     room = rooms[room_code]
+
+    # Both players must have confirmed via HTTP before WebSocket connect
+    if not all(p.get("confirmed") for p in room["players"]):
+        await websocket.close(code=4001, reason="Both players must confirm before connecting")
+        return
+
     await websocket.accept()
 
     # Attach the WebSocket to the first empty player slot
@@ -47,20 +52,25 @@ async def websocket_game(websocket: WebSocket, room_code: str):
 
     opponent_index = 1 - player_index
 
-    # When both players are connected, initialize combat and send GAME_START
-    # 두 명 모두 WS 연결됐을 때 → OPPONENT_JOINED 전송 (게임은 방장 confirm 후 시작)
-    if len(room["players"]) == 2 and room["players"][opponent_index]["ws"] is not None:
-        # Initialize combat state
+    # When both players have WebSocket connected → init combat and send GAME_START
+    if (
+        len(room["players"]) == 2
+        and room["players"][opponent_index]["ws"] is not None
+        and "combat" not in room
+    ):
         room["combat"] = init_combat_state(room["players"])
         room["combat"]["start_time"] = time.time()
+        room["status"] = "playing"
 
         for idx in range(2):
             opp_idx = 1 - idx
-            msg = WSOpponentJoined(
-                type=WSType.OPPONENT_JOINED,
+            combat_me = room["combat"]["players"][idx]
+            combat_opp = room["combat"]["players"][opp_idx]
+            msg = WSGameStart(
+                type=WSType.GAME_START,
                 player_index=idx,
-                me=_to_player_state(room["players"][idx]),
-                opponent=_to_player_state(room["players"][opp_idx]),
+                me=_to_player_state(room["players"][idx], combat_me),
+                opponent=_to_player_state(room["players"][opp_idx], combat_opp),
             )
             await room["players"][idx]["ws"].send_json(msg.model_dump())
 
@@ -77,34 +87,10 @@ async def websocket_game(websocket: WebSocket, room_code: str):
             action = message.get("action")
 
             # Process combat actions
-            # 방장(P1)이 게임 시작 확인 → 전투 초기화 후 GAME_START 전송
-            if (
-                msg_type == "confirm_start"
-                and player_index == 0
-                and "combat" not in room
-            ):
-                room["combat"] = init_combat_state(room["players"])
-                room["combat"]["start_time"] = time.time()
-
-                for idx in range(2):
-                    opp_idx = 1 - idx
-                    combat_me = room["combat"]["players"][idx]
-                    combat_opp = room["combat"]["players"][opp_idx]
-                    msg = WSGameStart(
-                        type=WSType.GAME_START,
-                        player_index=idx,
-                        me=_to_player_state(room["players"][idx], combat_me),
-                        opponent=_to_player_state(room["players"][opp_idx], combat_opp),
-                    )
-                    await room["players"][idx]["ws"].send_json(msg.model_dump())
-                room["status"] = "playing"
-                continue
-
-            # 전투 액션 처리
             if msg_type == "player_action" and action and "combat" in room:
                 result = process_action(room["combat"], player_index, action)
 
-                # Send the attack result and both player states to the attacker
+                # Send the attack result to the attacker
                 attacker_msg = {
                     "type": "action_result",
                     "action": action,
@@ -119,7 +105,7 @@ async def websocket_game(websocket: WebSocket, room_code: str):
                 }
                 await websocket.send_json(attacker_msg)
 
-                # Send the hit result and both player states to the defender
+                # Send the hit result to the defender
                 if (
                     len(room["players"]) > opponent_index
                     and room["players"][opponent_index]["ws"]

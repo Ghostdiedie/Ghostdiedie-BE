@@ -1,5 +1,4 @@
 import random
-import string
 import time
 import threading
 
@@ -9,9 +8,9 @@ ROOM_EXPIRE_SECONDS = 60  # 60 seconds
 
 
 def generate_room_code() -> str:
-    """Generate a 4-character room code."""
+    """Generate an 8-digit numeric room code."""
     while True:
-        code = "".join(random.choices(string.ascii_uppercase, k=4))
+        code = "".join(random.choices("0123456789", k=8))
         if code not in rooms:
             return code
 
