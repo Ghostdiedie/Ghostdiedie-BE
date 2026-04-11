@@ -5,7 +5,7 @@ import threading
 
 rooms: dict[str, dict] = {}
 
-ROOM_EXPIRE_SECONDS = 300  # 5분
+ROOM_EXPIRE_SECONDS = 10  # 10초
 
 
 def generate_room_code() -> str:
@@ -30,12 +30,13 @@ def cleanup_expired_rooms():
 
 
 def _cleanup_loop():
-    """30초마다 만료된 방 정리"""
+    """5초마다 만료된 방 정리"""
     while True:
-        time.sleep(30)
+        time.sleep(5)
         expired = cleanup_expired_rooms()
         if expired:
-            print(f"[room_manager] 만료된 방 삭제: {expired}")
+            for code in expired:
+                print(f"[room_manager] 방 {code} 만료되었습니다. ({ROOM_EXPIRE_SECONDS}초 경과)")
 
 
 # 백그라운드 스레드로 정리 실행
