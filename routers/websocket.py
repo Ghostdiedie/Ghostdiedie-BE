@@ -15,7 +15,11 @@ def _to_player_state(p: dict, combat_player: dict = None) -> PlayerState:
         character_id=p["character_id"],
         profile_image_url=p.get("profile_image_url"),
         hp=combat_player["hp"] if combat_player else p.get("hp", 100),
-        special_gauge=combat_player["special_gauge"] if combat_player else p.get("special_gauge", 0),
+        special_gauge=(
+            combat_player["special_gauge"]
+            if combat_player
+            else p.get("special_gauge", 0)
+        ),
     )
 
 
@@ -44,26 +48,21 @@ async def websocket_game(websocket: WebSocket, room_code: str):
     opponent_index = 1 - player_index
 
     # When both players are connected, initialize combat and send GAME_START
-    if (
-        len(room["players"]) == 2
-        and room["players"][opponent_index]["ws"] is not None
-    ):
+    # 두 명 모두 WS 연결됐을 때 → OPPONENT_JOINED 전송 (게임은 방장 confirm 후 시작)
+    if len(room["players"]) == 2 and room["players"][opponent_index]["ws"] is not None:
         # Initialize combat state
         room["combat"] = init_combat_state(room["players"])
         room["combat"]["start_time"] = time.time()
 
         for idx in range(2):
             opp_idx = 1 - idx
-            combat_me = room["combat"]["players"][idx]
-            combat_opp = room["combat"]["players"][opp_idx]
-            msg = WSGameStart(
-                type=WSType.GAME_START,
+            msg = WSOpponentJoined(
+                type=WSType.OPPONENT_JOINED,
                 player_index=idx,
-                me=_to_player_state(room["players"][idx], combat_me),
-                opponent=_to_player_state(room["players"][opp_idx], combat_opp),
+                me=_to_player_state(room["players"][idx]),
+                opponent=_to_player_state(room["players"][opp_idx]),
             )
             await room["players"][idx]["ws"].send_json(msg.model_dump())
-        room["status"] = "playing"
 
     try:
         while True:
@@ -78,6 +77,30 @@ async def websocket_game(websocket: WebSocket, room_code: str):
             action = message.get("action")
 
             # Process combat actions
+            # 방장(P1)이 게임 시작 확인 → 전투 초기화 후 GAME_START 전송
+            if (
+                msg_type == "confirm_start"
+                and player_index == 0
+                and "combat" not in room
+            ):
+                room["combat"] = init_combat_state(room["players"])
+                room["combat"]["start_time"] = time.time()
+
+                for idx in range(2):
+                    opp_idx = 1 - idx
+                    combat_me = room["combat"]["players"][idx]
+                    combat_opp = room["combat"]["players"][opp_idx]
+                    msg = WSGameStart(
+                        type=WSType.GAME_START,
+                        player_index=idx,
+                        me=_to_player_state(room["players"][idx], combat_me),
+                        opponent=_to_player_state(room["players"][opp_idx], combat_opp),
+                    )
+                    await room["players"][idx]["ws"].send_json(msg.model_dump())
+                room["status"] = "playing"
+                continue
+
+            # 전투 액션 처리
             if msg_type == "player_action" and action and "combat" in room:
                 result = process_action(room["combat"], player_index, action)
 
