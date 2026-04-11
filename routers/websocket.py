@@ -10,7 +10,7 @@ from models.schemas import WSGameStart, WSOpponentLeft, WSType, PlayerState
 router = APIRouter()
 logger = logging.getLogger("ghostdiedie.websocket")
 
-AFK_TIMEOUT_SECONDS = 5   # seconds of inactivity before AFK timeout (testing: 5, production: 30)
+AFK_TIMEOUT_SECONDS = 30  # seconds of inactivity before AFK timeout
 AFK_CHECK_INTERVAL = 3    # seconds between AFK checks when no messages arrive
 
 

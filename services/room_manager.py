@@ -4,7 +4,7 @@ import threading
 
 rooms: dict[str, dict] = {}
 
-ROOM_EXPIRE_SECONDS = 300  # 5 minutes
+ROOM_EXPIRE_SECONDS = 180  # 3 minutes
 
 
 def generate_room_code() -> str:
@@ -29,9 +29,9 @@ def cleanup_expired_rooms():
 
 
 def _cleanup_loop():
-    """Clean up expired rooms every 5 seconds."""
+    """Clean up expired rooms every 10 seconds."""
     while True:
-        time.sleep(5)
+        time.sleep(10)
         expired = cleanup_expired_rooms()
         if expired:
             for code in expired:
