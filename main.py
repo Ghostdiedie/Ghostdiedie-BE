@@ -23,7 +23,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ---------- FastAPI 앱 ----------
-app = FastAPI(title="Tekken Game API", version="0.1.0")
+app = FastAPI(title="Ghostdiedie Club API", version="0.1.0")
 
 # React Native에서 호출 가능하도록 CORS 전부 허용 (해커톤용)
 app.add_middleware(
@@ -47,7 +47,7 @@ class MatchResponse(BaseModel):
 # ---------- 라우트 ----------
 @app.get("/")
 def root():
-    return {"status": "ok", "service": "tekken-backend"}
+    return {"status": "ok", "service": "ghostdiedie-club"}
 
 @app.get("/api/characters")
 def get_characters():
