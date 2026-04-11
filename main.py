@@ -1,11 +1,14 @@
 """
 Ghostdiedie Club Backend
-FastAPI + Supabase
+FastAPI + Supabase + WebSocket
 """
 import os
+import random
+import string
+import json
 from datetime import datetime
 from typing import Optional
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -36,7 +39,6 @@ def verify_api_key(key: str = Depends(api_key_header)):
 # ---------- FastAPI 앱 ----------
 app = FastAPI(title="Ghostdiedie Club API", version="0.1.0")
 
-# React Native에서 호출 가능하도록 CORS 전부 허용 (해커톤용)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -44,7 +46,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------- Pydantic 모델 (요청/응답 스펙) ----------
+# ---------- 방 관리 (인메모리) ----------
+rooms: dict[str, dict] = {}
+
+def generate_room_code() -> str:
+    """4자리 방 코드 생성"""
+    while True:
+        code = "".join(random.choices(string.ascii_uppercase, k=4))
+        if code not in rooms:
+            return code
+
+# ---------- Pydantic 모델 ----------
 class MatchCreate(BaseModel):
     player_name: str
     winner_character_id: int
@@ -54,6 +66,14 @@ class MatchCreate(BaseModel):
 class MatchResponse(BaseModel):
     match_id: str
     created_at: str
+
+class RoomCreate(BaseModel):
+    player_name: str
+    character_id: int
+
+class RoomJoin(BaseModel):
+    player_name: str
+    character_id: int
 
 # ---------- 라우트 ----------
 @app.get("/")
@@ -117,7 +137,6 @@ def get_leaderboard(limit: int = 10, _: str = Depends(verify_api_key)):
             .select("player_name")
             .execute()
         )
-        # 플레이어별 승수 집계 (간단히 파이썬에서 처리)
         counts = {}
         for row in result.data:
             name = row["player_name"]
@@ -130,3 +149,98 @@ def get_leaderboard(limit: int = 10, _: str = Depends(verify_api_key)):
         return ranked[:limit]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ---------- 방 API ----------
+@app.post("/api/rooms")
+def create_room(data: RoomCreate, _: str = Depends(verify_api_key)):
+    """방 생성 — 방 코드 반환"""
+    code = generate_room_code()
+    rooms[code] = {
+        "status": "waiting",  # waiting / playing / finished
+        "players": [
+            {"name": data.player_name, "character_id": data.character_id, "ws": None}
+        ],
+    }
+    return {"room_code": code, "status": "waiting"}
+
+@app.post("/api/rooms/{room_code}/join")
+def join_room(room_code: str, data: RoomJoin, _: str = Depends(verify_api_key)):
+    """방 참가"""
+    room_code = room_code.upper()
+    if room_code not in rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+    room = rooms[room_code]
+    if len(room["players"]) >= 2:
+        raise HTTPException(status_code=400, detail="Room is full")
+    room["players"].append(
+        {"name": data.player_name, "character_id": data.character_id, "ws": None}
+    )
+    room["status"] = "playing"
+    return {"room_code": room_code, "status": "playing"}
+
+@app.get("/api/rooms/{room_code}")
+def get_room(room_code: str, _: str = Depends(verify_api_key)):
+    """방 정보 조회"""
+    room_code = room_code.upper()
+    if room_code not in rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+    room = rooms[room_code]
+    return {
+        "room_code": room_code,
+        "status": room["status"],
+        "players": [
+            {"name": p["name"], "character_id": p["character_id"]}
+            for p in room["players"]
+        ],
+    }
+
+# ---------- WebSocket 대전 ----------
+@app.websocket("/ws/{room_code}")
+async def websocket_game(websocket: WebSocket, room_code: str):
+    room_code = room_code.upper()
+    if room_code not in rooms:
+        await websocket.close(code=4004, reason="Room not found")
+        return
+
+    room = rooms[room_code]
+    await websocket.accept()
+
+    # 빈 슬롯에 WebSocket 연결
+    player_index = None
+    for i, p in enumerate(room["players"]):
+        if p["ws"] is None:
+            p["ws"] = websocket
+            player_index = i
+            break
+
+    if player_index is None:
+        await websocket.close(code=4003, reason="Room is full")
+        return
+
+    # 상대에게 입장 알림
+    opponent_index = 1 - player_index
+    if len(room["players"]) > opponent_index and room["players"][opponent_index]["ws"]:
+        await room["players"][opponent_index]["ws"].send_json({
+            "type": "opponent_joined",
+            "player_name": room["players"][player_index]["name"],
+            "character_id": room["players"][player_index]["character_id"],
+        })
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            message = json.loads(data)
+
+            # 상대에게 메시지 전달 (움직임, 공격, 등)
+            if len(room["players"]) > opponent_index and room["players"][opponent_index]["ws"]:
+                await room["players"][opponent_index]["ws"].send_json(message)
+    except WebSocketDisconnect:
+        room["players"][player_index]["ws"] = None
+        # 상대에게 퇴장 알림
+        if len(room["players"]) > opponent_index and room["players"][opponent_index]["ws"]:
+            await room["players"][opponent_index]["ws"].send_json({
+                "type": "opponent_left",
+            })
+        # 둘 다 나가면 방 삭제
+        if all(p["ws"] is None for p in room["players"]):
+            del rooms[room_code]
