@@ -1,37 +1,66 @@
 # Tekken Backend (FastAPI + Supabase)
 
-## 1. Supabase 세팅
-1. https://app.supabase.com 에서 본인 프로젝트 열기
-2. 좌측 메뉴 **SQL Editor** → `schema.sql` 내용 복붙 후 Run
-3. 좌측 메뉴 **Project Settings → API** → `Project URL`과 `anon public` 키 복사
+3D 텍켄 게임의 백엔드 서버입니다.
 
-## 2. 로컬 실행
+## 기술 스택
+- **서버:** FastAPI (Python)
+- **DB:** Supabase (PostgreSQL)
+- **프론트:** React Native (별도 레포)
+
+## 로컬 실행 방법
+
+### 1. 환경 설정
 ```bash
-cd tekken-backend
+git clone git@github.com:Ghostdiedie/Ghostdiedie-BE.git
+cd Ghostdiedie-BE
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+```
 
-cp .env.example .env
-# .env 파일 열어서 SUPABASE_KEY 채우기
+### 2. 환경변수 설정
+`.env` 파일을 루트에 생성:
+```
+SUPABASE_URL=https://pdbhbsfnfcjmyrrsixqo.supabase.co
+SUPABASE_KEY=팀 노션 또는 민수에게 문의
+```
 
+### 3. 서버 실행
+```bash
 uvicorn main:app --reload --port 8000
 ```
 
-브라우저에서 확인:
-- http://localhost:8000/api/characters
-- http://localhost:8000/docs  ← Swagger 자동 문서 (프론트한테 이거 보여주면 됨!)
+### 4. 확인
+- http://localhost:8000 - 서버 상태 확인
+- http://localhost:8000/docs - Swagger API 문서 (프론트 개발 시 여기 참고)
 
-## 3. API 스펙 (프론트에 공유할 내용)
+## DB 스키마
+Supabase SQL Editor에서 `schema.sql` 실행하면 테이블 생성됨.
+
+| 테이블 | 설명 |
+|---|---|
+| `characters` | 캐릭터 정보 (이름, HP, 공격력) |
+| `matches` | 매치 결과 기록 |
+
+### 샘플 캐릭터
+| ID | 이름 | HP | 공격력 |
+|---|---|---|---|
+| 1 | Jin | 100 | 15 |
+| 2 | Kazuya | 110 | 13 |
+| 3 | Heihachi | 95 | 17 |
+| 4 | Paul | 105 | 14 |
+| 5 | King | 115 | 12 |
+
+## API 스펙
 
 | Method | Endpoint | 설명 |
 |---|---|---|
-| GET  | `/api/characters` | 전체 캐릭터 목록 |
-| GET  | `/api/characters/{id}` | 캐릭터 상세 |
+| GET | `/api/characters` | 전체 캐릭터 목록 |
+| GET | `/api/characters/{id}` | 캐릭터 상세 |
 | POST | `/api/matches` | 매치 결과 저장 |
-| GET  | `/api/leaderboard?limit=10` | 랭킹 |
+| GET | `/api/leaderboard?limit=10` | 플레이어 승수 랭킹 |
 
-### POST /api/matches Body
+### POST /api/matches 요청 예시
 ```json
 {
   "player_name": "민수",
@@ -41,19 +70,9 @@ uvicorn main:app --reload --port 8000
 }
 ```
 
-## 4. 배포 (Railway 추천 - 5분이면 끝)
-1. 코드 GitHub에 push
-2. https://railway.app → New Project → Deploy from GitHub
-3. Variables 탭에 `SUPABASE_URL`, `SUPABASE_KEY` 추가
-4. Settings → Networking → Generate Domain (임시 주소 나옴)
-5. **GoDaddy 도메인 연결:** Railway가 준 도메인을 GoDaddy DNS에서 CNAME으로 등록
-   - GoDaddy → My Products → DNS → Add Record
-   - Type: `CNAME`, Name: `api`, Value: `xxx.up.railway.app`
-   - 그러면 `api.본인도메인.com` 으로 접속 가능
-
-## 5. React Native에서 호출 예시
+### React Native에서 호출 예시
 ```js
-const API = "https://api.본인도메인.com";
+const API = "https://api.도메인.com"; // 배포 후 주소로 변경
 
 // 캐릭터 목록
 const res = await fetch(`${API}/api/characters`);
@@ -71,3 +90,7 @@ await fetch(`${API}/api/matches`, {
   }),
 });
 ```
+
+## 배포
+- **플랫폼:** Railway
+- **도메인:** GoDaddy → CNAME으로 Railway 도메인 연결
