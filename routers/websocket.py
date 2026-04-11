@@ -16,6 +16,10 @@ logger = logging.getLogger("ghostdiedie.websocket")
 # lag (~50 ms at 20 Hz) and network latency.
 MAX_ATTACK_RANGE = 4.5
 
+# Countdown duration must match the frontend constants:
+# 5 steps × 1000 ms + 1400 ms for FIGHT! display
+COUNTDOWN_TOTAL_MS = 6400
+
 
 def _distance(pos_a: list, pos_b: list) -> float:
     dx = pos_a[0] - pos_b[0]
@@ -74,6 +78,7 @@ async def _handle_post_round(
 
         server_now_ms = int(time.time() * 1000)
         countdown_start_ms = server_now_ms + 1500
+        room["fight_start_time"] = (countdown_start_ms + COUNTDOWN_TOTAL_MS) / 1000.0
 
         for idx in range(2):
             opp_idx = 1 - idx
@@ -209,9 +214,11 @@ async def websocket_game(websocket: WebSocket, room_code: str):
         room["current_round"] = 1
         room["status"] = "playing"
         # Track last known position of each player for range checks
-        room["positions"] = [[0.0, 0.0, 0.0], [0.0, 0.0, -5.0]]
+        room["positions"] = [[0.0, 0.0, 6.0], [0.0, 0.0, -6.0]]
         server_now_ms = int(time.time() * 1000)
         countdown_start_ms = server_now_ms + 1500
+        # No combat allowed until the countdown finishes
+        room["fight_start_time"] = (countdown_start_ms + COUNTDOWN_TOTAL_MS) / 1000.0
 
         for idx in range(2):
             opp_idx = 1 - idx
@@ -317,6 +324,14 @@ async def websocket_game(websocket: WebSocket, room_code: str):
                 and "combat" in room
                 and not room["combat"].get("ko_processed", False)
             ):
+                # Block actions during countdown
+                if room.get("fight_start_time") and now < room["fight_start_time"]:
+                    logger.info(
+                        "player_action EARLY room=%s player_index=%s action=%s remaining=%.2fs",
+                        room_code, player_index, action, room["fight_start_time"] - now,
+                    )
+                    continue
+
                 # Range check — block attacks that are too far away
                 if "positions" in room:
                     dist = _distance(

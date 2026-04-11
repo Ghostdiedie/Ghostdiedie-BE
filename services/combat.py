@@ -1,62 +1,44 @@
 """
 Ghostdiedie combat damage engine.
 
-- Base damage: character attack stat
-- First-hit bonus: 1.5x if the attacker strikes before the opponent acts
-- Block reduction: 50% damage reduction while the defender is blocking
-- Special move: costs 100 gauge and deals 3x damage
-- HP at 0 or below ends the game
+Available attacks (matches frontend CV detection):
+  - left punch   : base damage
+  - right punch  : base damage
+  - kick         : 1.3x damage, slightly longer range feel
+  - special      : 3x damage, costs full gauge (100)
+
+All characters share identical stats — balance is in the gameplay, not the roster.
 """
 
 import time
 
-# Default character combat stats
-# Punch deals ~6% HP → KO in ~17 clean hits, matches last ~60-90s
-DEFAULT_ATTACK = {
-    1: 12,   # Jin       — balanced all-rounder
-    2: 10,   # Kazuya    — low base, high HP compensates
-    3: 15,   # Heihachi  — glass cannon, hits hard
-    4: 13,   # Paul      — heavy hitter
-    5: 10,   # King      — grappler, durable but slow damage
-}
+# ── Shared stats (all characters identical) ──────────────────────────────────
+BASE_HP          = 200
+BASE_PUNCH       = 8     # left punch / right punch damage
+KICK_MULTIPLIER  = 1.3   # kick hits harder than a punch
+SPECIAL_MULTIPLIER = 3.0  # special = big hit, gauge cost required
+SPECIAL_GAUGE_COST = 100  # must fill the whole gauge to use special
+MAX_GAUGE        = 100
 
-DEFAULT_HP = {
-    1: 200,  # Jin
-    2: 220,  # Kazuya    — tanky
-    3: 180,  # Heihachi  — glass cannon
-    4: 200,  # Paul
-    5: 230,  # King      — most durable
-}
+# ── Combat modifiers ─────────────────────────────────────────────────────────
+FIRST_HIT_WINDOW      = 1.0   # seconds of opponent inactivity → counter-hit
+FIRST_HIT_MULTIPLIER  = 1.2   # counter-hit bonus
+BLOCK_REDUCTION       = 0.5   # blocked hit deals 50% damage
+GAUGE_PER_HIT         = 12    # gauge gained on a successful attack
+GAUGE_PER_BLOCK       = 8     # gauge gained on blocking a hit
 
-DEFAULT_MAX_GAUGE = {
-    1: 100,
-    2: 100,
-    3: 100,
-    4: 100,
-    5: 100,
-}
-
-FIRST_HIT_WINDOW = 1.0       # Seconds of inactivity that grants counter-hit bonus
-FIRST_HIT_MULTIPLIER = 1.3   # Counter-hit bonus (Tekken-style ~1.2-1.3x)
-BLOCK_REDUCTION = 0.5        # Damage taken while blocking (50% reduction, not free)
-SPECIAL_MULTIPLIER = 3.0     # Special = ~20% of HP, worth saving gauge for
-SPECIAL_GAUGE_COST = 100     # Full gauge required for special
-KICK_MULTIPLIER = 1.3        # Kicks hit harder than punches but slower on FE
-GAUGE_PER_HIT = 12           # Gauge gained per successful attack (~8 hits to fill)
-GAUGE_PER_BLOCK = 8          # Reward defensive play
-
-# Attack action list
+# Recognised attack strings sent from the frontend
 ATTACK_ACTIONS = ("right punch", "left punch", "kick", "special")
 
 
 def get_character_stats(character_id: int) -> dict:
-    """Return combat stats for a character ID."""
+    """Return combat stats. All characters are equal."""
     return {
-        "hp": DEFAULT_HP.get(character_id, 100),
-        "max_hp": DEFAULT_HP.get(character_id, 100),
-        "attack": DEFAULT_ATTACK.get(character_id, 15),
+        "hp": BASE_HP,
+        "max_hp": BASE_HP,
+        "attack": BASE_PUNCH,
         "special_gauge": 0,
-        "max_gauge": DEFAULT_MAX_GAUGE.get(character_id, 100),
+        "max_gauge": MAX_GAUGE,
     }
 
 
@@ -131,17 +113,15 @@ def process_action(combat: dict, player_index: int, action: str) -> dict:
         attacker["last_action_time"] = now
         return result
 
-    # Handle attacks
+    # Handle attacks: "left punch" / "right punch" → base, "kick" → 1.3x, "special" → 3x
     attacker["blocking"] = False
-    base_damage = attacker["attack"]
+    base_damage = attacker["attack"]   # BASE_PUNCH for everyone
     is_special = action == "special"
     is_kick = action == "kick"
 
-    # Kicks do slightly more damage than punches
     if is_kick:
         base_damage = int(base_damage * KICK_MULTIPLIER)
 
-    # Handle special moves
     if is_special:
         if attacker["special_gauge"] < SPECIAL_GAUGE_COST:
             return result  # Not enough gauge; ignore the action
