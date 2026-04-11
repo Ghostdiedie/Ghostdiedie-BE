@@ -1,11 +1,12 @@
 """
-3D Tekken Game Backend
+Ghostdiedie Club Backend
 FastAPI + Supabase
 """
 import os
 from datetime import datetime
 from typing import Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
@@ -15,12 +16,22 @@ load_dotenv()
 
 # ---------- Supabase 클라이언트 ----------
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")  # anon key 사용
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+API_KEY = os.getenv("API_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise RuntimeError("SUPABASE_URL / SUPABASE_KEY 환경변수가 필요합니다 (.env 확인)")
+if not API_KEY:
+    raise RuntimeError("API_KEY 환경변수가 필요합니다 (.env 확인)")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# ---------- API Key 인증 ----------
+api_key_header = APIKeyHeader(name="X-API-Key")
+
+def verify_api_key(key: str = Depends(api_key_header)):
+    if key != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
 
 # ---------- FastAPI 앱 ----------
 app = FastAPI(title="Ghostdiedie Club API", version="0.1.0")
@@ -50,7 +61,7 @@ def root():
     return {"status": "ok", "service": "ghostdiedie-club"}
 
 @app.get("/api/characters")
-def get_characters():
+def get_characters(_: str = Depends(verify_api_key)):
     """선택 가능한 캐릭터 전체 목록"""
     try:
         result = supabase.table("characters").select("*").execute()
@@ -59,7 +70,7 @@ def get_characters():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/characters/{character_id}")
-def get_character(character_id: int):
+def get_character(character_id: int, _: str = Depends(verify_api_key)):
     """특정 캐릭터 상세 정보"""
     try:
         result = (
@@ -78,7 +89,7 @@ def get_character(character_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/matches", response_model=MatchResponse)
-def create_match(match: MatchCreate):
+def create_match(match: MatchCreate, _: str = Depends(verify_api_key)):
     """경기 결과 저장"""
     try:
         payload = {
@@ -98,7 +109,7 @@ def create_match(match: MatchCreate):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/leaderboard")
-def get_leaderboard(limit: int = 10):
+def get_leaderboard(limit: int = 10, _: str = Depends(verify_api_key)):
     """플레이어별 승수 랭킹"""
     try:
         result = (
