@@ -10,39 +10,40 @@ Ghostdiedie combat damage engine.
 
 import time
 
-# Default character combat stats cached on server startup
+# Default character combat stats
+# HP 200 (uniform) — punches deal ~4-5% per hit, fights last ~20-35 exchanges
 DEFAULT_ATTACK = {
-    1: 15,   # Jin
-    2: 13,   # Kazuya
-    3: 17,   # Heihachi
-    4: 14,   # Paul
-    5: 12,   # King
+    1: 8,    # Jin       — balanced
+    2: 7,    # Kazuya    — low damage, high HP
+    3: 10,   # Heihachi  — high damage, lower durability
+    4: 9,    # Paul      — heavy hitter
+    5: 7,    # King      — grappler style, low base attack
 }
 
 DEFAULT_HP = {
-    1: 100,  # Jin
-    2: 110,  # Kazuya
-    3: 95,   # Heihachi
-    4: 105,  # Paul
-    5: 115,  # King
+    1: 200,  # Jin
+    2: 220,  # Kazuya    — tanky
+    3: 180,  # Heihachi  — glass cannon
+    4: 200,  # Paul
+    5: 230,  # King      — most durable
 }
 
 DEFAULT_MAX_GAUGE = {
     1: 100,
-    2: 120,
-    3: 80,
+    2: 100,
+    3: 100,
     4: 100,
-    5: 90,
+    5: 100,
 }
 
-FIRST_HIT_WINDOW = 0.3       # First-hit timing window in seconds
-FIRST_HIT_MULTIPLIER = 1.5   # Damage multiplier for a first hit
-BLOCK_REDUCTION = 0.5         # Damage reduction while blocking
-SPECIAL_MULTIPLIER = 3.0      # Damage multiplier for special moves
-SPECIAL_GAUGE_COST = 100      # Gauge cost for a special move
-KICK_MULTIPLIER = 1.2         # Kick damage multiplier
-GAUGE_PER_HIT = 15            # Gauge gained per attack
-GAUGE_PER_BLOCK = 5           # Gauge gained per block
+FIRST_HIT_WINDOW = 1.5       # Seconds of inactivity that grants first-hit bonus
+FIRST_HIT_MULTIPLIER = 1.25  # Subtle bonus for landing the first strike
+BLOCK_REDUCTION = 0.2        # Damage taken while blocking (80% reduction)
+SPECIAL_MULTIPLIER = 2.2     # Special deals ~2x normal — impactful but not one-shot
+SPECIAL_GAUGE_COST = 100     # Full gauge required for special
+KICK_MULTIPLIER = 1.4        # Kicks are noticeably stronger than punches
+GAUGE_PER_HIT = 12           # Gauge gained per successful attack
+GAUGE_PER_BLOCK = 8          # Slightly more gauge for blocking (reward defensive play)
 
 # Attack action list
 ATTACK_ACTIONS = ("right punch", "left punch", "kick", "special")

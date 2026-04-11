@@ -56,7 +56,8 @@ class PlayerState(BaseModel):
     name: str
     character_id: int
     profile_image_url: Optional[str] = None  # User photo URL composited onto the character face
-    hp: int             = 100
+    hp: int             = 200
+    max_hp: int         = 200
     special_gauge: int  = 0
 
 

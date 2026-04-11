@@ -16,7 +16,8 @@ def _to_player_state(player: dict, combat_player: dict = None) -> PlayerState:
         name=player["name"],
         character_id=player["character_id"],
         profile_image_url=player.get("profile_image_url"),
-        hp=combat_player["hp"] if combat_player else 100,
+        hp=combat_player["hp"] if combat_player else 200,
+        max_hp=combat_player["max_hp"] if combat_player else 200,
         special_gauge=combat_player["special_gauge"] if combat_player else 0,
     )
 
