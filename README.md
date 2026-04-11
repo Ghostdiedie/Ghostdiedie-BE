@@ -1,39 +1,39 @@
 # Ghostdiedie Club Backend
 
-격투 게임 백엔드 서버 (FastAPI + Supabase + WebSocket)
+Fighting game backend server (FastAPI + Supabase + WebSocket)
 
-## 기술 스택
-- **서버:** FastAPI (Python)
+## Tech Stack
+- **Server:** FastAPI (Python)
 - **DB:** Supabase (PostgreSQL)
-- **실시간:** WebSocket (방 시스템 + 대전)
-- **CV 클라이언트:** OpenCV + MediaPipe (별도 레포: `Ghostdiedie-CV`)
-- **프론트:** React Native (별도 레포)
-- **배포:** Railway
-- **도메인:** `api.ghostdiedie.club` (Porkbun → CNAME → Railway)
+- **Real-time:** WebSocket (room system + matches)
+- **CV client:** OpenCV + MediaPipe (separate repo: `Ghostdiedie-CV`)
+- **Frontend:** React Native (separate repo)
+- **Deployment:** Railway
+- **Domain:** `api.ghostdiedie.club` (Porkbun -> CNAME -> Railway)
 
-## 프로젝트 구조
+## Project Structure
 ```
-├── main.py                 # FastAPI 앱 진입점
+├── main.py                 # FastAPI app entry point
 ├── core/
-│   ├── config.py           # Supabase 클라이언트, 환경변수
-│   └── auth.py             # API Key 인증
+│   ├── config.py           # Supabase client, environment variables
+│   └── auth.py             # API key authentication
 ├── routers/
-│   ├── characters.py       # 캐릭터 API
-│   ├── matches.py          # 매치 결과 API
-│   ├── rooms.py            # 방 생성/참가 API
-│   └── websocket.py        # WebSocket 대전
+│   ├── characters.py       # Character API
+│   ├── matches.py          # Match result API
+│   ├── rooms.py            # Room create/join API
+│   └── websocket.py        # WebSocket battle logic
 ├── models/
-│   └── schemas.py          # Pydantic 모델 (요청/응답/WS 메시지)
+│   └── schemas.py          # Pydantic models (request/response/WS messages)
 ├── services/
-│   └── room_manager.py     # 방 관리 (인메모리)
-├── schema.sql              # DB 스키마
-├── test_ws.html            # WebSocket 테스트 페이지
+│   └── room_manager.py     # Room management (in-memory)
+├── schema.sql              # DB schema
+├── test_ws.html            # WebSocket test page
 └── requirements.txt
 ```
 
-## 로컬 실행 방법
+## Local Setup
 
-### 1. 환경 설정
+### 1. Environment Setup
 ```bash
 git clone git@github.com:Ghostdiedie/Ghostdiedie-BE.git
 cd Ghostdiedie-BE
@@ -42,46 +42,46 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. 환경변수 설정
-`.env` 파일을 루트에 생성:
+### 2. Environment Variables
+Create a `.env` file in the project root:
 ```
 SUPABASE_URL=https://xxxxxxxxxxxxxxxxxxxx.supabase.co
 SUPABASE_KEY=your-anon-key-here
 API_KEY=your-api-key-here
 ```
-값은 민수에게 문의
+Ask Minsu for the actual values.
 
-### 3. 서버 실행
+### 3. Run the Server
 ```bash
 uvicorn main:app --reload --port 8000
 ```
 
-### 4. 확인
-- http://localhost:8000 — 서버 상태
-- http://localhost:8000/docs — Swagger API 문서
-- http://localhost:8000/test — WebSocket 테스트 페이지
+### 4. Verify
+- http://localhost:8000 — server status
+- http://localhost:8000/docs — Swagger API docs
+- http://localhost:8000/test — WebSocket test page
 
-## 배포 URL
+## Deployment URLs
 - **API:** `https://api.ghostdiedie.club`
-- **API 문서:** `https://api.ghostdiedie.club/docs`
-- **WebSocket 테스트:** `https://api.ghostdiedie.club/test`
+- **API docs:** `https://api.ghostdiedie.club/docs`
+- **WebSocket test:** `https://api.ghostdiedie.club/test`
 
-## 인증
-모든 `/api/*` 엔드포인트는 API Key 인증 필요. 요청 시 헤더에 추가:
+## Authentication
+All `/api/*` endpoints require API key authentication. Include this header in requests:
 ```
-X-API-Key: (민수에게 문의)
+X-API-Key: (ask Minsu)
 ```
 
-## DB 스키마
-Supabase SQL Editor에서 `schema.sql` 실행하면 테이블 생성됨.
+## DB Schema
+Run `schema.sql` in the Supabase SQL Editor to create the tables.
 
-| 테이블 | 설명 |
+| Table | Description |
 |---|---|
-| `characters` | 캐릭터 정보 (이름, 체력, 공격력, 필살기 게이지) |
-| `matches` | 매치 결과 기록 (방 코드, 승자/패자, 소요시간) |
+| `characters` | Character data (name, HP, attack power, special gauge) |
+| `matches` | Match result records (room code, winner/loser, duration) |
 
-### 캐릭터
-| ID | 이름 | 체력 | 공격력 | 필살기 게이지 |
+### Characters
+| ID | Name | HP | Attack | Special Gauge |
 |---|---|---|---|---|
 | 1 | Jin | 100 | 15 | 100 |
 | 2 | Kazuya | 110 | 13 | 120 |
@@ -89,138 +89,138 @@ Supabase SQL Editor에서 `schema.sql` 실행하면 테이블 생성됨.
 | 4 | Paul | 105 | 14 | 100 |
 | 5 | King | 115 | 12 | 90 |
 
-## API 스펙
+## API Spec
 
 ### REST API
 
-| Method | Endpoint | 설명 |
+| Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/characters` | 전체 캐릭터 목록 |
-| GET | `/api/characters/{id}` | 캐릭터 상세 |
-| POST | `/api/matches` | 매치 결과 저장 |
-| GET | `/api/leaderboard?limit=10` | 플레이어 승수 랭킹 |
-| POST | `/api/rooms` | 방 생성 (4자리 코드 반환) |
-| POST | `/api/rooms/{code}/join` | 방 참가 |
-| GET | `/api/rooms/{code}` | 방 정보 조회 |
+| GET | `/api/characters` | List all characters |
+| GET | `/api/characters/{id}` | Get character details |
+| POST | `/api/matches` | Save a match result |
+| GET | `/api/leaderboard?limit=10` | Player win ranking |
+| POST | `/api/rooms` | Create a room (returns a 4-character code) |
+| POST | `/api/rooms/{code}/join` | Join a room |
+| GET | `/api/rooms/{code}` | Get room details |
 
 ### WebSocket
 
-| Endpoint | 설명 |
+| Endpoint | Description |
 |---|---|
-| `wss://api.ghostdiedie.club/ws/{room_code}` | 실시간 대전 연결 |
+| `wss://api.ghostdiedie.club/ws/{room_code}` | Real-time match connection |
 
-## CV 클라이언트 연결
+## CV Client Integration
 
-`Ghostdiedie-CV` 레포에서 카메라로 펀치 모션을 감지하고, 이 서버로 WebSocket을 통해 전송합니다.
+The `Ghostdiedie-CV` repo detects punch motions from a camera and sends them to this server through WebSocket.
 
-### 연결 구조
+### Connection Flow
 ```
-[카메라] → MediaPipe 모션 감지 → action_queue → WebSocket → [이 서버] → 데미지 계산 → 양쪽에 결과 전송
+[Camera] -> MediaPipe motion detection -> action_queue -> WebSocket -> [This server] -> damage calculation -> result broadcast to both players
 ```
 
-### CV 클라이언트 실행
+### Run the CV Client
 ```bash
 cd Ghostdiedie-CV
 pip install -r requirements.txt
 python3 main.py
 ```
 
-CV `.env` 설정:
+CV `.env` configuration:
 ```
 SERVER_URL=https://api.ghostdiedie.club
 WS_URL=wss://api.ghostdiedie.club
-API_KEY=<API 키>
+API_KEY=<API key>
 ```
 
-## 게임 흐름
+## Game Flow
 
-### 방 상태
-`waiting` → `ready` → `playing` → `finished`
+### Room States
+`waiting` -> `ready` -> `playing` -> `finished`
 
-### 전체 흐름
-1. 플레이어1 → `POST /api/rooms` → 방 코드 받음 (예: `ABCD`) → 상태: `waiting`
-2. 플레이어2 → `POST /api/rooms/ABCD/join` → 입장 → 상태: `ready`
-3. 둘 다 → `wss://api.ghostdiedie.club/ws/ABCD` WebSocket 연결
-4. 둘 다 연결되면 → `game_start` 메시지 자동 전송 → 상태: `playing`
-5. CV 모션 감지 → `player_action` 전송 → **서버가 데미지 계산** → 양쪽에 결과 전송
-6. HP 0 이하 → `game_end` 자동 전송 → 상태: `finished`
+### Full Flow
+1. Player 1 -> `POST /api/rooms` -> receives room code (for example, `ABCD`) -> status: `waiting`
+2. Player 2 -> `POST /api/rooms/ABCD/join` -> joins room -> status: `ready`
+3. Both players -> connect to `wss://api.ghostdiedie.club/ws/ABCD`
+4. Once both are connected -> `game_start` is sent automatically -> status: `playing`
+5. CV detects a motion -> sends `player_action` -> **server calculates damage** -> results are sent to both players
+6. HP reaches 0 or below -> `game_end` is sent automatically -> status: `finished`
 
-### 전투 시스템
-서버가 데미지를 계산합니다. 클라이언트는 액션만 전송하면 됩니다.
+### Combat System
+The server calculates damage. Clients only need to send actions.
 
-| 액션 | 데미지 | 설명 |
+| Action | Damage | Description |
 |---|---|---|
-| `right punch` | 캐릭터 attack | 오른쪽 주먹 |
-| `left punch` | 캐릭터 attack | 왼쪽 주먹 |
-| `kick` | attack x 1.2 | 발차기 (펀치보다 강함) |
-| `block` | - | 방어 (받는 데미지 50% 감소, 게이지 +5) |
-| `special` | attack x 3.0 | 필살기 (게이지 100 소모) |
-| `jump` | - | 점프 (이동) |
-| `walk` | - | 걷기 (이동) |
-| `idle` | - | 대기 |
+| `right punch` | character attack | Right punch |
+| `left punch` | character attack | Left punch |
+| `kick` | attack x 1.2 | Kick (stronger than a punch) |
+| `block` | - | Defend (reduces incoming damage by 50%, gauge +5) |
+| `special` | attack x 3.0 | Special move (costs 100 gauge) |
+| `jump` | - | Jump (movement) |
+| `walk` | - | Walk (movement) |
+| `idle` | - | Idle |
 
-**선빵 보너스:** 상대가 0.3초 내 공격하지 않았으면 데미지 **1.5배**
-**게이지 충전:** 공격 시 +15, 방어 시 +5
+**First-hit bonus:** If the opponent does not attack within 0.3 seconds, damage is multiplied by **1.5**
+**Gauge charge:** +15 on attack, +5 on defense
 
-### WebSocket 메시지 타입
+### WebSocket Message Types
 
-**클라 → 서버:**
-| 타입 | 설명 |
+**Client -> Server:**
+| Type | Description |
 |---|---|
-| `player_action` | 플레이어 동작 전송 (`action` 필드 필수) |
+| `player_action` | Send a player action (`action` field required) |
 
-**서버 → 클라:**
-| 타입 | 대상 | 설명 |
+**Server -> Client:**
+| Type | Target | Description |
 |---|---|---|
-| `game_start` | 양쪽 | 게임 시작 (플레이어 정보, HP, 게이지) |
-| `action_result` | 공격자 | 내 공격 결과 (데미지, 선빵, 방어 여부, 양쪽 HP/게이지) |
-| `hit_received` | 수비자 | 맞은 결과 (데미지, 선빵, 방어 여부, 양쪽 HP/게이지) |
-| `game_end` | 양쪽 | KO — 승자/패자/소요시간 |
-| `opponent_left` | 남은 쪽 | 상대 퇴장 |
+| `game_start` | Both | Game start (player info, HP, gauge) |
+| `action_result` | Attacker | Your attack result (damage, first hit, block status, both HP/gauges) |
+| `hit_received` | Defender | Result of getting hit (damage, first hit, block status, both HP/gauges) |
+| `game_end` | Both | KO -> winner, loser, duration |
+| `opponent_left` | Remaining player | Opponent disconnected |
 
-### 요청 예시
+### Request Examples
 
-**방 생성:**
+**Create room:**
 ```json
 POST /api/rooms
 {
-  "player_name": "민수",
+  "player_name": "Minsu",
   "character_id": 1,
   "profile_image_url": "https://example.com/face.jpg"
 }
-→ { "room_code": "ABCD", "status": "waiting", "players": [...] }
+-> { "room_code": "ABCD", "status": "waiting", "players": [...] }
 ```
 
-**방 참가:**
+**Join room:**
 ```json
 POST /api/rooms/ABCD/join
 {
-  "player_name": "철수",
+  "player_name": "Cheolsu",
   "character_id": 2,
   "profile_image_url": "https://example.com/face2.jpg"
 }
-→ { "room_code": "ABCD", "status": "ready", "players": [...] }
+-> { "room_code": "ABCD", "status": "ready", "players": [...] }
 ```
 
-**매치 결과 저장:**
+**Save match result:**
 ```json
 POST /api/matches
 {
   "room_code": "ABCD",
-  "winner_name": "민수",
-  "loser_name": "철수",
+  "winner_name": "Minsu",
+  "loser_name": "Cheolsu",
   "winner_character_id": 1,
   "loser_character_id": 2,
   "duration_seconds": 87
 }
 ```
 
-**WebSocket 송신 (클라 → 서버):**
+**WebSocket send (client -> server):**
 ```json
 { "type": "player_action", "action": "right punch" }
 ```
 
-**WebSocket 수신 — action_result (공격자에게):**
+**WebSocket receive - `action_result` (to attacker):**
 ```json
 {
   "type": "action_result",
@@ -236,7 +236,7 @@ POST /api/matches
 }
 ```
 
-**WebSocket 수신 — hit_received (수비자에게):**
+**WebSocket receive - `hit_received` (to defender):**
 ```json
 {
   "type": "hit_received",
@@ -252,18 +252,18 @@ POST /api/matches
 }
 ```
 
-**WebSocket 수신 — game_end (양쪽에게):**
+**WebSocket receive - `game_end` (to both players):**
 ```json
 {
   "type": "game_end",
   "winner_index": 0,
-  "winner_name": "민수",
-  "loser_name": "철수",
+  "winner_name": "Minsu",
+  "loser_name": "Cheolsu",
   "duration_seconds": 87
 }
 ```
 
-### React Native에서 호출 예시
+### React Native Example
 ```js
 const API = "https://api.ghostdiedie.club";
 const HEADERS = {
@@ -271,22 +271,22 @@ const HEADERS = {
   "X-API-Key": "YOUR_API_KEY",
 };
 
-// 캐릭터 목록
+// Character list
 const res = await fetch(`${API}/api/characters`, { headers: HEADERS });
 const characters = await res.json();
 
-// 방 생성
+// Create room
 const room = await fetch(`${API}/api/rooms`, {
   method: "POST",
   headers: HEADERS,
   body: JSON.stringify({
-    player_name: "민수",
+    player_name: "Minsu",
     character_id: 1,
     profile_image_url: "https://example.com/face.jpg",
   }),
 }).then(r => r.json());
 
-// WebSocket 연결
+// Connect WebSocket
 const ws = new WebSocket(`wss://api.ghostdiedie.club/ws/${room.room_code}`);
 
 ws.onmessage = (e) => {
@@ -294,25 +294,25 @@ ws.onmessage = (e) => {
   switch (data.type) {
     case "game_start":
       // data.player_index (0=P1, 1=P2), data.me, data.opponent
-      // data.me.hp, data.me.special_gauge 등
+      // data.me.hp, data.me.special_gauge, etc.
       break;
     case "action_result":
-      // 내 공격 결과: data.damage, data.first_hit, data.blocked, data.is_special
+      // My attack result: data.damage, data.first_hit, data.blocked, data.is_special
       // data.my_hp, data.opponent_hp, data.my_gauge, data.opponent_gauge
       break;
     case "hit_received":
-      // 맞은 결과: data.damage, data.first_hit, data.blocked, data.is_special
+      // Hit result: data.damage, data.first_hit, data.blocked, data.is_special
       // data.my_hp, data.opponent_hp, data.my_gauge, data.opponent_gauge
       break;
     case "game_end":
       // data.winner_index, data.winner_name, data.loser_name, data.duration_seconds
       break;
     case "opponent_left":
-      // 상대 퇴장
+      // Opponent left the match
       break;
   }
 };
 
-// 공격 보내기 (데미지는 서버가 계산)
+// Send attack action (damage is calculated by the server)
 ws.send(JSON.stringify({ type: "player_action", action: "right punch" }));
 ```

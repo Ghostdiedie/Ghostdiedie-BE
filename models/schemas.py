@@ -6,10 +6,10 @@ from pydantic import BaseModel
 # ── Enums ─────────────────────────────────────────────────────────────────────
 
 class RoomStatus(str, Enum):
-    WAITING  = "waiting"    # 방 생성됨, P2 대기 중
-    READY    = "ready"      # P2 참가 완료, WS 연결 대기
-    PLAYING  = "playing"    # 게임 진행 중
-    FINISHED = "finished"   # 게임 종료
+    WAITING  = "waiting"    # Room created, waiting for player 2
+    READY    = "ready"      # Player 2 joined, waiting for WebSocket connection
+    PLAYING  = "playing"    # Match in progress
+    FINISHED = "finished"   # Match finished
 
 
 class ActionType(str, Enum):
@@ -20,42 +20,42 @@ class ActionType(str, Enum):
     JUMP    = "jump"
     WALK    = "walk"
     BLOCK   = "block"
-    HIT     = "hit"         # 맞는 모션 (서버 → 클라 전용)
-    SPECIAL = "special"     # 필살기 (게이지 소모)
+    HIT     = "hit"         # Hit animation (server -> client only)
+    SPECIAL = "special"     # Special move (consumes gauge)
 
 
 class WSType(str, Enum):
-    # 연결 이벤트
+    # Connection events
     OPPONENT_JOINED = "opponent_joined"
     OPPONENT_LEFT   = "opponent_left"
-    # 게임 흐름
+    # Game flow
     GAME_START      = "game_start"
     ROUND_START     = "round_start"
     ROUND_END       = "round_end"
     GAME_END        = "game_end"
-    # 플레이어 동작 (OpenCV 감지 → 서버 relay → 상대방)
+    # Player actions (OpenCV detection -> server relay -> opponent)
     PLAYER_ACTION   = "player_action"
-    # 상태 동기화 (HP / 게이지)
+    # State synchronization (HP / gauge)
     STATE_UPDATE    = "state_update"
 
 
 # ── Character ─────────────────────────────────────────────────────────────────
 
 class CharacterInfo(BaseModel):
-    """DB characters 테이블 응답"""
+    """Response model for the DB `characters` table."""
     id: int
     name: str
-    max_hp: int             # 캐릭터 고유 체력 (예: 100~150)
-    max_special_gauge: int  # 필살기 게이지 최대값 (예: 100)
+    max_hp: int             # Character-specific max HP (for example, 100-150)
+    max_special_gauge: int  # Maximum special gauge value
 
 
 # ── Player / Room ─────────────────────────────────────────────────────────────
 
 class PlayerState(BaseModel):
-    """방 안에서 한 플레이어의 전체 상태"""
+    """Complete state for one player inside a room."""
     name: str
     character_id: int
-    profile_image_url: Optional[str] = None  # 캐릭터 얼굴에 합성할 유저 사진 URL
+    profile_image_url: Optional[str] = None  # User photo URL composited onto the character face
     hp: int             = 100
     special_gauge: int  = 0
 
@@ -73,7 +73,7 @@ class RoomJoin(BaseModel):
 
 
 class RoomResponse(BaseModel):
-    """방 조회 / 생성 / 참가 응답"""
+    """Response for room fetch, create, and join."""
     room_code: str
     status: RoomStatus
     players: list[PlayerState]
@@ -82,7 +82,7 @@ class RoomResponse(BaseModel):
 # ── Match ─────────────────────────────────────────────────────────────────────
 
 class MatchCreate(BaseModel):
-    """게임 종료 후 결과 저장 요청"""
+    """Request body for saving match results after a game ends."""
     room_code: str
     winner_name: str
     loser_name: str
@@ -99,35 +99,35 @@ class MatchResponse(BaseModel):
 # ── WebSocket Messages ────────────────────────────────────────────────────────
 
 class WSOpponentJoined(BaseModel):
-    """상대방이 WS에 접속했을 때 양쪽 모두에게 전송"""
+    """Sent to both players when the opponent connects to WebSocket."""
     type: Literal[WSType.OPPONENT_JOINED]
-    player_index: int       # 수신자 기준: 0 = P1(좌), 1 = P2(우)
+    player_index: int       # From the receiver's perspective: 0 = P1 (left), 1 = P2 (right)
     me: PlayerState
     opponent: PlayerState
 
 
 class WSGameStart(BaseModel):
-    """두 플레이어 모두 WS 연결 완료 → 게임 시작 신호"""
+    """Sent when both players finish connecting over WebSocket."""
     type: Literal[WSType.GAME_START]
-    player_index: int       # 0 = P1(좌), 1 = P2(우)
+    player_index: int       # 0 = P1 (left), 1 = P2 (right)
     me: PlayerState
     opponent: PlayerState
 
 
 class WSRoundStart(BaseModel):
     type: Literal[WSType.ROUND_START]
-    round_number: int       # 1부터 시작
+    round_number: int       # Starts at 1
 
 
 class WSPlayerAction(BaseModel):
-    """OpenCV가 감지한 동작 → 서버 → 상대방에게 relay"""
+    """Action detected by OpenCV and relayed through the server to the opponent."""
     type: Literal[WSType.PLAYER_ACTION]
     action: ActionType
-    damage: Optional[int] = None   # 프론트에서 계산한 데미지 (선택)
+    damage: Optional[int] = None   # Optional damage calculated by the frontend
 
 
 class WSStateUpdate(BaseModel):
-    """HP / 게이지 동기화 (공격 hit 후 양쪽에 전송)"""
+    """HP and gauge synchronization sent to both players after a hit."""
     type: Literal[WSType.STATE_UPDATE]
     player_hp: int
     opponent_hp: int
@@ -142,7 +142,7 @@ class WSRoundEnd(BaseModel):
 
 
 class WSGameEnd(BaseModel):
-    """모든 라운드 종료 → 최종 승자"""
+    """Sent when all rounds are finished and a final winner is decided."""
     type: Literal[WSType.GAME_END]
     winner_index: int
     winner_name: str

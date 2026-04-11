@@ -10,7 +10,7 @@ router = APIRouter(tags=["Rooms"])
 
 @router.post("/api/rooms", response_model=RoomResponse)
 def create_room(data: RoomCreate, _: str = Depends(verify_api_key)):
-    """방 생성 — 방 코드 반환"""
+    """Create a room and return its room code."""
     code = generate_room_code()
     stats = get_character_stats(data.character_id)
     rooms[code] = {
@@ -39,7 +39,7 @@ def create_room(data: RoomCreate, _: str = Depends(verify_api_key)):
 
 @router.post("/api/rooms/{room_code}/join", response_model=RoomResponse)
 def join_room(room_code: str, data: RoomJoin, _: str = Depends(verify_api_key)):
-    """방 참가"""
+    """Join an existing room."""
     room_code = room_code.upper()
     if room_code not in rooms:
         raise HTTPException(status_code=404, detail="Room not found")
@@ -60,7 +60,8 @@ def join_room(room_code: str, data: RoomJoin, _: str = Depends(verify_api_key)):
             "ws": None,
         }
     )
-    # HTTP 참가 완료 → ready (실제 playing은 WS 연결 후 websocket.py에서 변경)
+    # After the HTTP join succeeds, mark the room ready.
+    # The actual playing state is set in websocket.py after both clients connect.
     room["status"] = RoomStatus.READY
     return RoomResponse(
         room_code=room_code,
@@ -74,7 +75,7 @@ def join_room(room_code: str, data: RoomJoin, _: str = Depends(verify_api_key)):
 
 @router.get("/api/rooms/{room_code}", response_model=RoomResponse)
 def get_room(room_code: str, _: str = Depends(verify_api_key)):
-    """방 정보 조회"""
+    """Return room details."""
     room_code = room_code.upper()
     if room_code not in rooms:
         raise HTTPException(status_code=404, detail="Room not found")

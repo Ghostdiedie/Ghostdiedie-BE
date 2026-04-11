@@ -9,7 +9,7 @@ router = APIRouter()
 
 
 def _to_player_state(p: dict, combat_player: dict = None) -> PlayerState:
-    """room 딕셔너리의 플레이어 항목 → PlayerState"""
+    """Convert a room player entry into `PlayerState`."""
     return PlayerState(
         name=p["name"],
         character_id=p["character_id"],
@@ -29,7 +29,7 @@ async def websocket_game(websocket: WebSocket, room_code: str):
     room = rooms[room_code]
     await websocket.accept()
 
-    # 빈 슬롯에 WebSocket 연결
+    # Attach the WebSocket to the first empty player slot
     player_index = None
     for i, p in enumerate(room["players"]):
         if p["ws"] is None:
@@ -43,12 +43,12 @@ async def websocket_game(websocket: WebSocket, room_code: str):
 
     opponent_index = 1 - player_index
 
-    # 두 명 모두 WS 연결됐을 때 → 전투 상태 초기화 + GAME_START 전송
+    # When both players are connected, initialize combat and send GAME_START
     if (
         len(room["players"]) == 2
         and room["players"][opponent_index]["ws"] is not None
     ):
-        # 전투 상태 초기화
+        # Initialize combat state
         room["combat"] = init_combat_state(room["players"])
         room["combat"]["start_time"] = time.time()
 
@@ -77,11 +77,11 @@ async def websocket_game(websocket: WebSocket, room_code: str):
             msg_type = message.get("type")
             action = message.get("action")
 
-            # 전투 액션 처리
+            # Process combat actions
             if msg_type == "player_action" and action and "combat" in room:
                 result = process_action(room["combat"], player_index, action)
 
-                # 공격자에게: 내가 가한 데미지 + 양쪽 상태
+                # Send the attack result and both player states to the attacker
                 attacker_msg = {
                     "type": "action_result",
                     "action": action,
@@ -96,7 +96,7 @@ async def websocket_game(websocket: WebSocket, room_code: str):
                 }
                 await websocket.send_json(attacker_msg)
 
-                # 수비자에게: 상대가 나를 때림 + 양쪽 상태
+                # Send the hit result and both player states to the defender
                 if (
                     len(room["players"]) > opponent_index
                     and room["players"][opponent_index]["ws"]
@@ -115,7 +115,7 @@ async def websocket_game(websocket: WebSocket, room_code: str):
                     }
                     await room["players"][opponent_index]["ws"].send_json(defender_msg)
 
-                # KO 판정
+                # Handle KO
                 if result["ko"]:
                     winner_idx = result["ko_winner"]
                     loser_idx = 1 - winner_idx
@@ -136,7 +136,7 @@ async def websocket_game(websocket: WebSocket, room_code: str):
                     room["status"] = "finished"
 
             else:
-                # 기타 메시지는 그대로 relay
+                # Relay other messages as-is
                 if (
                     len(room["players"]) > opponent_index
                     and room["players"][opponent_index]["ws"]

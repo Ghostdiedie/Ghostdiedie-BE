@@ -1,16 +1,16 @@
 """
-Ghostdiedie 전투 데미지 엔진
+Ghostdiedie combat damage engine.
 
-- 기본 데미지: 캐릭터 attack 값
-- 선빵 보너스: 상대가 쿨다운 중이 아닐 때 먼저 때리면 1.5배
-- 방어 감소: 상대가 block 중이면 데미지 50% 감소
-- 필살기: 게이지 100 소모, 데미지 3배
-- HP 0 이하 → 게임 종료
+- Base damage: character attack stat
+- First-hit bonus: 1.5x if the attacker strikes before the opponent acts
+- Block reduction: 50% damage reduction while the defender is blocking
+- Special move: costs 100 gauge and deals 3x damage
+- HP at 0 or below ends the game
 """
 
 import time
 
-# 캐릭터 기본 공격력 (DB 값과 동일, 서버 시작 시 캐싱용)
+# Default character combat stats cached on server startup
 DEFAULT_ATTACK = {
     1: 15,   # Jin
     2: 13,   # Kazuya
@@ -35,21 +35,21 @@ DEFAULT_MAX_GAUGE = {
     5: 90,
 }
 
-FIRST_HIT_WINDOW = 0.3       # 선빵 판정 시간 (초)
-FIRST_HIT_MULTIPLIER = 1.5   # 선빵 데미지 배율
-BLOCK_REDUCTION = 0.5         # 방어 시 데미지 감소율
-SPECIAL_MULTIPLIER = 3.0      # 필살기 데미지 배율
-SPECIAL_GAUGE_COST = 100      # 필살기 게이지 소모량
-KICK_MULTIPLIER = 1.2         # 킥 데미지 배율 (펀치보다 약간 강함)
-GAUGE_PER_HIT = 15            # 공격 시 게이지 충전량
-GAUGE_PER_BLOCK = 5           # 방어 시 게이지 충전량
+FIRST_HIT_WINDOW = 0.3       # First-hit timing window in seconds
+FIRST_HIT_MULTIPLIER = 1.5   # Damage multiplier for a first hit
+BLOCK_REDUCTION = 0.5         # Damage reduction while blocking
+SPECIAL_MULTIPLIER = 3.0      # Damage multiplier for special moves
+SPECIAL_GAUGE_COST = 100      # Gauge cost for a special move
+KICK_MULTIPLIER = 1.2         # Kick damage multiplier
+GAUGE_PER_HIT = 15            # Gauge gained per attack
+GAUGE_PER_BLOCK = 5           # Gauge gained per block
 
-# 공격 액션 목록
+# Attack action list
 ATTACK_ACTIONS = ("right punch", "left punch", "kick", "special")
 
 
 def get_character_stats(character_id: int) -> dict:
-    """캐릭터 ID → 전투 스탯 반환 (rooms.py, combat 모두 이걸 사용)"""
+    """Return combat stats for a character ID."""
     return {
         "hp": DEFAULT_HP.get(character_id, 100),
         "max_hp": DEFAULT_HP.get(character_id, 100),
@@ -60,7 +60,7 @@ def get_character_stats(character_id: int) -> dict:
 
 
 def init_combat_state(players: list[dict]) -> dict:
-    """WebSocket 연결 시 전투 상태 초기화 (room player 데이터 기반)"""
+    """Initialize combat state when both WebSocket clients connect."""
     state = {
         "start_time": None,
         "players": [],
@@ -78,20 +78,20 @@ def init_combat_state(players: list[dict]) -> dict:
 
 def process_action(combat: dict, player_index: int, action: str) -> dict:
     """
-    플레이어 액션 처리 → 결과 반환
+    Process a player action and return the result.
 
     Returns:
         {
-            "damage": int,           # 상대에게 가한 데미지
-            "attacker_hp": int,      # 공격자 현재 HP
-            "defender_hp": int,      # 수비자 현재 HP
-            "attacker_gauge": int,   # 공격자 게이지
-            "defender_gauge": int,   # 수비자 게이지
-            "first_hit": bool,       # 선빵 여부
-            "blocked": bool,         # 방어됨 여부
-            "is_special": bool,      # 필살기 여부
-            "ko": bool,             # KO 여부
-            "ko_winner": int | None, # KO 시 승자 인덱스
+            "damage": int,           # Damage dealt to the defender
+            "attacker_hp": int,      # Current attacker HP
+            "defender_hp": int,      # Current defender HP
+            "attacker_gauge": int,   # Current attacker gauge
+            "defender_gauge": int,   # Current defender gauge
+            "first_hit": bool,       # Whether the first-hit bonus applied
+            "blocked": bool,         # Whether the hit was blocked
+            "is_special": bool,      # Whether the action was a special move
+            "ko": bool,              # Whether the defender was KO'd
+            "ko_winner": int | None, # Winner index when a KO occurs
         }
     """
     attacker = combat["players"][player_index]
@@ -111,7 +111,7 @@ def process_action(combat: dict, player_index: int, action: str) -> dict:
         "ko_winner": None,
     }
 
-    # 방어 상태 업데이트
+    # Update block state
     if action == "block":
         attacker["blocking"] = True
         attacker["last_action"] = "block"
@@ -123,57 +123,57 @@ def process_action(combat: dict, player_index: int, action: str) -> dict:
         result["attacker_gauge"] = attacker["special_gauge"]
         return result
 
-    # 공격이 아닌 액션 (jump, walk, idle 등) → 상대에게 relay만
+    # Non-attack actions are only relayed to the opponent
     if action not in ATTACK_ACTIONS:
         attacker["blocking"] = False
         attacker["last_action"] = action
         attacker["last_action_time"] = now
         return result
 
-    # ── 공격 처리 ──
+    # Handle attacks
     attacker["blocking"] = False
     base_damage = attacker["attack"]
     is_special = action == "special"
     is_kick = action == "kick"
 
-    # 킥은 펀치보다 약간 강함
+    # Kicks do slightly more damage than punches
     if is_kick:
         base_damage = int(base_damage * KICK_MULTIPLIER)
 
-    # 필살기 처리
+    # Handle special moves
     if is_special:
         if attacker["special_gauge"] < SPECIAL_GAUGE_COST:
-            return result  # 게이지 부족 → 무시
+            return result  # Not enough gauge; ignore the action
         attacker["special_gauge"] -= SPECIAL_GAUGE_COST
         base_damage = int(base_damage * SPECIAL_MULTIPLIER)
         result["is_special"] = True
     else:
-        # 일반 공격 시 게이지 충전
+        # Charge gauge on normal attacks
         attacker["special_gauge"] = min(
             attacker["special_gauge"] + GAUGE_PER_HIT,
             attacker["max_gauge"],
         )
 
-    # 선빵 보너스: 상대가 최근에 공격하지 않았으면 (쿨다운 밖)
+    # First-hit bonus if the opponent has not attacked recently
     time_since_opponent = now - defender["last_action_time"]
     if time_since_opponent > FIRST_HIT_WINDOW and not is_special:
         base_damage = int(base_damage * FIRST_HIT_MULTIPLIER)
         result["first_hit"] = True
 
-    # 방어 감소
+    # Reduce damage if the defender is blocking
     if defender["blocking"]:
         base_damage = int(base_damage * BLOCK_REDUCTION)
         result["blocked"] = True
-        # 방어자도 게이지 소량 충전
+        # The defender also gains a small amount of gauge
         defender["special_gauge"] = min(
             defender["special_gauge"] + GAUGE_PER_BLOCK,
             defender["max_gauge"],
         )
 
-    # 데미지 적용
+    # Apply damage
     defender["hp"] = max(0, defender["hp"] - base_damage)
 
-    # 타임스탬프 갱신
+    # Update action timestamp
     attacker["last_action"] = action
     attacker["last_action_time"] = now
 
@@ -183,7 +183,7 @@ def process_action(combat: dict, player_index: int, action: str) -> dict:
     result["attacker_gauge"] = attacker["special_gauge"]
     result["defender_gauge"] = defender["special_gauge"]
 
-    # KO 판정
+    # Check for KO
     if defender["hp"] <= 0:
         result["ko"] = True
         result["ko_winner"] = player_index

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Ghostdiedie WebSocket 테스트</title>
+    <title>Ghostdiedie WebSocket Test</title>
     <style>
         body { font-family: monospace; background: #1a1a1a; color: #eee; padding: 20px; }
         h1 { color: #00ff88; }
@@ -22,43 +22,43 @@
     </style>
 </head>
 <body>
-    <h1>Ghostdiedie WebSocket 테스트</h1>
+    <h1>Ghostdiedie WebSocket Test</h1>
 
     <div class="section">
-        <h3>1. 방 만들기 / 참가</h3>
+        <h3>1. Create or Join a Room</h3>
         <label>API URL</label>
         <input id="apiUrl" value="https://api.ghostdiedie.club" style="width:300px">
         <label>API Key</label>
         <input id="apiKey" value="REMOVED_EXPOSED_API_KEY" style="width:400px">
-        <label>플레이어 이름</label>
+        <label>Player Name</label>
         <input id="playerName" value="Player1">
-        <label>캐릭터 ID (1~5)</label>
+        <label>Character ID (1-5)</label>
         <input id="characterId" type="number" value="1" min="1" max="5">
         <br><br>
-        <button class="btn-create" onclick="createRoom()">방 만들기</button>
-        <label>방 코드</label>
+        <button class="btn-create" onclick="createRoom()">Create Room</button>
+        <label>Room Code</label>
         <input id="roomCode" placeholder="ABCD">
-        <button class="btn-join" onclick="joinRoom()">방 참가</button>
+        <button class="btn-join" onclick="joinRoom()">Join Room</button>
     </div>
 
     <div class="section">
-        <h3>2. WebSocket 연결</h3>
-        <button class="btn-join" onclick="connectWS()">WebSocket 연결</button>
-        <button class="btn-disconnect" onclick="disconnectWS()">연결 끊기</button>
+        <h3>2. Connect WebSocket</h3>
+        <button class="btn-join" onclick="connectWS()">Connect WebSocket</button>
+        <button class="btn-disconnect" onclick="disconnectWS()">Disconnect</button>
     </div>
 
     <div class="section">
-        <h3>3. 메시지 보내기</h3>
-        <button class="btn-send" onclick="sendAction('move', {x: 100, y: 50})">이동 (100, 50)</button>
-        <button class="btn-send" onclick="sendAction('attack', {damage: 15})">공격 (15)</button>
-        <button class="btn-send" onclick="sendAction('block', {})">방어</button>
+        <h3>3. Send Messages</h3>
+        <button class="btn-send" onclick="sendAction('move', {x: 100, y: 50})">Move (100, 50)</button>
+        <button class="btn-send" onclick="sendAction('attack', {damage: 15})">Attack (15)</button>
+        <button class="btn-send" onclick="sendAction('block', {})">Block</button>
         <br><br>
-        <label>커스텀 JSON</label>
+        <label>Custom JSON</label>
         <input id="customMsg" style="width:400px" value='{"type":"attack","damage":20}'>
-        <button class="btn-send" onclick="sendCustom()">전송</button>
+        <button class="btn-send" onclick="sendCustom()">Send</button>
     </div>
 
-    <h3>로그</h3>
+    <h3>Log</h3>
     <div id="log"></div>
 
 <script>
@@ -89,12 +89,12 @@
             const data = await res.json();
             if (data.room_code) {
                 document.getElementById('roomCode').value = data.room_code;
-                log(`방 생성 완료! 코드: ${data.room_code}`);
+                log(`Room created. Code: ${data.room_code}`);
             } else {
-                log(`에러: ${JSON.stringify(data)}`, 'msg-error');
+                log(`Error: ${JSON.stringify(data)}`, 'msg-error');
             }
         } catch (e) {
-            log(`에러: ${e.message}`, 'msg-error');
+            log(`Error: ${e.message}`, 'msg-error');
         }
     }
 
@@ -111,9 +111,9 @@
                 }),
             });
             const data = await res.json();
-            log(`방 참가: ${JSON.stringify(data)}`);
+            log(`Joined room: ${JSON.stringify(data)}`);
         } catch (e) {
-            log(`에러: ${e.message}`, 'msg-error');
+            log(`Error: ${e.message}`, 'msg-error');
         }
     }
 
@@ -124,10 +124,10 @@
 
         ws = new WebSocket(`${wsUrl}/ws/${code}`);
 
-        ws.onopen = () => log('WebSocket 연결됨!');
-        ws.onmessage = (e) => log(`수신: ${e.data}`, 'msg-received');
-        ws.onclose = (e) => log(`연결 종료 (code: ${e.code}, reason: ${e.reason})`, 'msg-error');
-        ws.onerror = () => log('WebSocket 에러', 'msg-error');
+        ws.onopen = () => log('WebSocket connected.');
+        ws.onmessage = (e) => log(`Received: ${e.data}`, 'msg-received');
+        ws.onclose = (e) => log(`Connection closed (code: ${e.code}, reason: ${e.reason})`, 'msg-error');
+        ws.onerror = () => log('WebSocket error', 'msg-error');
     }
 
     function disconnectWS() {
@@ -135,17 +135,17 @@
     }
 
     function sendAction(type, data) {
-        if (!ws || ws.readyState !== WebSocket.OPEN) { log('WebSocket 연결 안 됨', 'msg-error'); return; }
+        if (!ws || ws.readyState !== WebSocket.OPEN) { log('WebSocket is not connected.', 'msg-error'); return; }
         const msg = { type, ...data };
         ws.send(JSON.stringify(msg));
-        log(`송신: ${JSON.stringify(msg)}`, 'msg-sent');
+        log(`Sent: ${JSON.stringify(msg)}`, 'msg-sent');
     }
 
     function sendCustom() {
-        if (!ws || ws.readyState !== WebSocket.OPEN) { log('WebSocket 연결 안 됨', 'msg-error'); return; }
+        if (!ws || ws.readyState !== WebSocket.OPEN) { log('WebSocket is not connected.', 'msg-error'); return; }
         const msg = document.getElementById('customMsg').value;
         ws.send(msg);
-        log(`송신: ${msg}`, 'msg-sent');
+        log(`Sent: ${msg}`, 'msg-sent');
     }
 </script>
 </body>

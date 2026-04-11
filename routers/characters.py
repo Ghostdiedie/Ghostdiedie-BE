@@ -10,7 +10,7 @@ BUCKET = "character-images"
 
 @router.get("/api/characters")
 def get_characters(_: str = Depends(verify_api_key)):
-    """선택 가능한 캐릭터 전체 목록 (ID, 이름, HP, 공격력, 필살기 게이지, 이미지 URL)"""
+    """Return all selectable characters with stats and image URLs."""
     try:
         result = supabase.table("characters").select("*").execute()
         for char in result.data:
@@ -22,7 +22,7 @@ def get_characters(_: str = Depends(verify_api_key)):
 
 @router.get("/api/characters/{character_id}")
 def get_character(character_id: int, _: str = Depends(verify_api_key)):
-    """특정 캐릭터 상세 정보 (이미지 URL 포함)"""
+    """Return details for one character, including the image URL."""
     try:
         result = (
             supabase.table("characters")
@@ -47,8 +47,8 @@ async def upload_character_image(
     file: UploadFile = File(...),
     _: str = Depends(verify_api_key),
 ):
-    """캐릭터 이미지 업로드 (webp). 기존 이미지가 있으면 덮어씁니다."""
-    # 캐릭터 존재 확인
+    """Upload a character image in WebP format and overwrite any existing file."""
+    # Confirm that the character exists
     result = supabase.table("characters").select("id").eq("id", character_id).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Character not found")
@@ -57,7 +57,7 @@ async def upload_character_image(
     path = f"{character_id}.webp"
 
     try:
-        # 기존 파일 삭제 시도 (없어도 에러 무시)
+        # Try to remove the existing file first; ignore missing-file errors
         try:
             supabase.storage.from_(BUCKET).remove([path])
         except Exception:
@@ -77,7 +77,7 @@ async def upload_character_image(
 
 @router.get("/api/characters/{character_id}/image")
 def get_character_image(character_id: int):
-    """캐릭터 이미지 반환 (인증 불필요)"""
+    """Return a character image without requiring authentication."""
     path = f"{character_id}.webp"
     try:
         data = supabase.storage.from_(BUCKET).download(path)

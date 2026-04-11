@@ -8,7 +8,7 @@ router = APIRouter(tags=["Matches"])
 
 @router.post("/api/matches", response_model=MatchResponse)
 def create_match(match: MatchCreate, _: str = Depends(verify_api_key)):
-    """경기 결과 저장 (KO 시 서버가 자동 전송하지만, 클라에서 직접 호출도 가능)"""
+    """Save a match result after a game ends."""
     try:
         payload = {
             "room_code": match.room_code,
@@ -30,7 +30,7 @@ def create_match(match: MatchCreate, _: str = Depends(verify_api_key)):
 
 @router.get("/api/leaderboard")
 def get_leaderboard(limit: int = 10, _: str = Depends(verify_api_key)):
-    """플레이어별 승수 랭킹"""
+    """Return a leaderboard ranked by player wins."""
     try:
         result = (
             supabase.table("matches")

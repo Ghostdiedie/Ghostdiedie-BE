@@ -12,35 +12,35 @@ app = FastAPI(
     title="Ghostdiedie Club API",
     version="0.2.0",
     description="""
-격투 게임 백엔드 서버 — 모션 인식 기반 실시간 대전
+Fighting game backend server with motion-based real-time battles
 
-## 게임 흐름
-1. `POST /api/rooms` → 방 생성 (4자리 코드 반환)
-2. `POST /api/rooms/{code}/join` → 상대방 참가
-3. `WebSocket /ws/{code}` → 양쪽 연결 시 `game_start` 전송
-4. CV 모션 감지 → `player_action` 전송 → 서버가 데미지 계산
-5. HP 0 → `game_end` 전송
+## Game Flow
+1. `POST /api/rooms` -> create a room and receive a 4-character code
+2. `POST /api/rooms/{code}/join` -> the opponent joins the room
+3. `WebSocket /ws/{code}` -> `game_start` is sent when both players connect
+4. CV motion detection sends `player_action` -> the server calculates damage
+5. When HP reaches 0, `game_end` is sent
 
-## 전투 시스템
-| 액션 | 효과 |
+## Combat System
+| Action | Effect |
 |---|---|
-| `right punch` / `left punch` | 기본 데미지 (캐릭터 attack 값) |
-| `kick` | 데미지 1.2배 |
-| `block` | 방어 (받는 데미지 50% 감소, 게이지 +5) |
-| `special` | 필살기 (게이지 100 소모, 데미지 3배) |
-| `jump` / `walk` | 이동 (데미지 없음) |
+| `right punch` / `left punch` | Base damage (character attack stat) |
+| `kick` | 1.2x damage |
+| `block` | Defend (50% reduced incoming damage, +5 gauge) |
+| `special` | Special move (costs 100 gauge, deals 3x damage) |
+| `jump` / `walk` | Movement (no damage) |
 
-- **선빵 보너스**: 상대가 0.3초 내 공격 안 했으면 데미지 1.5배
-- **게이지 충전**: 공격 시 +15, 방어 시 +5
+- **First-hit bonus**: damage is multiplied by 1.5 if the opponent has not attacked within 0.3 seconds
+- **Gauge charge**: +15 on attack, +5 on defense
 
-## WebSocket 메시지 타입
-| 타입 | 방향 | 설명 |
+## WebSocket Message Types
+| Type | Direction | Description |
 |---|---|---|
-| `game_start` | 서버 → 클라 | 게임 시작 (양쪽 플레이어 정보) |
-| `action_result` | 서버 → 공격자 | 내 공격 결과 (데미지, HP, 게이지) |
-| `hit_received` | 서버 → 수비자 | 맞은 결과 (데미지, HP, 게이지) |
-| `game_end` | 서버 → 양쪽 | KO — 승자/패자/소요시간 |
-| `opponent_left` | 서버 → 클라 | 상대 퇴장 |
+| `game_start` | server -> client | Game start (both players' info) |
+| `action_result` | server -> attacker | Your attack result (damage, HP, gauge) |
+| `hit_received` | server -> defender | Result of getting hit (damage, HP, gauge) |
+| `game_end` | server -> both | KO -> winner, loser, duration |
+| `opponent_left` | server -> client | Opponent disconnected |
 """,
 )
 

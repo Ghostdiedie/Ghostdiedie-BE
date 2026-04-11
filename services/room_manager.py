@@ -5,11 +5,11 @@ import threading
 
 rooms: dict[str, dict] = {}
 
-ROOM_EXPIRE_SECONDS = 60  # 10초
+ROOM_EXPIRE_SECONDS = 60  # 60 seconds
 
 
 def generate_room_code() -> str:
-    """4자리 방 코드 생성"""
+    """Generate a 4-character room code."""
     while True:
         code = "".join(random.choices(string.ascii_uppercase, k=4))
         if code not in rooms:
@@ -17,7 +17,7 @@ def generate_room_code() -> str:
 
 
 def cleanup_expired_rooms():
-    """만료된 방 삭제 (5분 경과 + playing 상태가 아닌 방)"""
+    """Delete expired rooms that are not currently playing."""
     now = time.time()
     expired = [
         code for code, room in rooms.items()
@@ -30,15 +30,15 @@ def cleanup_expired_rooms():
 
 
 def _cleanup_loop():
-    """5초마다 만료된 방 정리"""
+    """Clean up expired rooms every 5 seconds."""
     while True:
         time.sleep(5)
         expired = cleanup_expired_rooms()
         if expired:
             for code in expired:
-                print(f"[room_manager] 방 {code} 만료되었습니다. ({ROOM_EXPIRE_SECONDS}초 경과)")
+                print(f"[room_manager] Room {code} expired after {ROOM_EXPIRE_SECONDS} seconds.")
 
 
-# 백그라운드 스레드로 정리 실행
+# Run cleanup in a background thread
 _cleanup_thread = threading.Thread(target=_cleanup_loop, daemon=True)
 _cleanup_thread.start()

@@ -1,6 +1,6 @@
--- Supabase 대시보드 > SQL Editor 에서 그대로 실행하세요
+-- Run this directly in Supabase Dashboard > SQL Editor
 
--- 캐릭터 테이블
+-- Character table
 create table if not exists characters (
   id                bigserial primary key,
   name              text not null,
@@ -10,7 +10,7 @@ create table if not exists characters (
   description       text
 );
 
--- 매치 결과 테이블
+-- Match results table
 create table if not exists matches (
   id                  uuid primary key default gen_random_uuid(),
   room_code           text not null,
@@ -22,15 +22,15 @@ create table if not exists matches (
   created_at          timestamptz not null default now()
 );
 
--- 샘플 캐릭터 데이터
+-- Sample character data
 insert into characters (name, max_hp, attack, max_special_gauge, description) values
-  ('Jin',      100, 15, 100, '미시마 진'),
-  ('Kazuya',   110, 13, 120, '미시마 카즈야'),
-  ('Heihachi',  95, 17,  80, '미시마 헤이하치'),
-  ('Paul',     105, 14, 100, '폴 피닉스'),
-  ('King',     115, 12,  90, '킹')
+  ('Jin',      100, 15, 100, 'Mishima Jin'),
+  ('Kazuya',   110, 13, 120, 'Mishima Kazuya'),
+  ('Heihachi',  95, 17,  80, 'Mishima Heihachi'),
+  ('Paul',     105, 14, 100, 'Paul Phoenix'),
+  ('King',     115, 12,  90, 'King')
 on conflict do nothing;
 
--- 해커톤용: anon key로 읽기/쓰기 허용 (RLS 끄기)
+-- Hackathon setup: allow read/write with anon key (disable RLS)
 alter table characters disable row level security;
 alter table matches    disable row level security;
