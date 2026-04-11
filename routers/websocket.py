@@ -10,8 +10,28 @@ from models.schemas import WSGameStart, WSOpponentLeft, WSType, PlayerState
 router = APIRouter()
 logger = logging.getLogger("ghostdiedie.websocket")
 
+# Maximum 3-D distance between fighters for an attack to land.
+# FIGHTER_MIN_DISTANCE on the frontend is 1.8, so players can be at most
+# ~1.8 units apart when touching. We add generous buffer for position-sync
+# lag (~50 ms at 20 Hz) and network latency.
+MAX_ATTACK_RANGE = 4.5
 
-async def _handle_post_round(room: dict, room_code: str, players: list, winner_idx: int, current_round: int, current_round_wins: list):
+
+def _distance(pos_a: list, pos_b: list) -> float:
+    dx = pos_a[0] - pos_b[0]
+    dy = pos_a[1] - pos_b[1]
+    dz = pos_a[2] - pos_b[2]
+    return (dx * dx + dy * dy + dz * dz) ** 0.5
+
+
+async def _handle_post_round(
+    room: dict,
+    room_code: str,
+    players: list,
+    winner_idx: int,
+    current_round: int,
+    current_round_wins: list,
+):
     """Wait after a round ends, then send round_start or game_end."""
     loser_idx = 1 - winner_idx
     await asyncio.sleep(3.5)
@@ -33,7 +53,12 @@ async def _handle_post_round(room: dict, room_code: str, players: list, winner_i
                     await players[idx]["ws"].send_json(game_end_msg)
                 except Exception:
                     pass
-        logger.info("game_end room=%s winner_index=%s duration=%s", room_code, winner_idx, duration)
+        logger.info(
+            "game_end room=%s winner_index=%s duration=%s",
+            room_code,
+            winner_idx,
+            duration,
+        )
     else:
         next_round = current_round + 1
         room["current_round"] = next_round
@@ -60,8 +85,16 @@ async def _handle_post_round(room: dict, room_code: str, players: list, winner_i
                 "round_wins": current_round_wins,
                 "server_now_ms": server_now_ms,
                 "countdown_start_ms": countdown_start_ms,
-                "me": {"hp": combat_me["hp"], "max_hp": combat_me["max_hp"], "special_gauge": 0},
-                "opponent": {"hp": combat_opp["hp"], "max_hp": combat_opp["max_hp"], "special_gauge": 0},
+                "me": {
+                    "hp": combat_me["hp"],
+                    "max_hp": combat_me["max_hp"],
+                    "special_gauge": 0,
+                },
+                "opponent": {
+                    "hp": combat_opp["hp"],
+                    "max_hp": combat_opp["max_hp"],
+                    "special_gauge": 0,
+                },
             }
             if players[idx]["ws"]:
                 try:
@@ -71,11 +104,15 @@ async def _handle_post_round(room: dict, room_code: str, players: list, winner_i
 
         logger.info(
             "round_start sent room=%s round=%s round_wins=%s countdown_start_ms=%s",
-            room_code, next_round, current_round_wins, countdown_start_ms,
+            room_code,
+            next_round,
+            current_round_wins,
+            countdown_start_ms,
         )
 
+
 AFK_TIMEOUT_SECONDS = 30  # seconds of inactivity before AFK timeout
-AFK_CHECK_INTERVAL = 3    # seconds between AFK checks when no messages arrive
+AFK_CHECK_INTERVAL = 3  # seconds between AFK checks when no messages arrive
 
 
 def _to_player_state(player: dict, combat_player: dict = None) -> PlayerState:
@@ -116,7 +153,9 @@ async def websocket_game(websocket: WebSocket, room_code: str):
             room["owner"]["confirmed"],
             room["guest"]["confirmed"],
         )
-        await websocket.close(code=4001, reason="Both players must confirm before connecting")
+        await websocket.close(
+            code=4001, reason="Both players must confirm before connecting"
+        )
         return
 
     if not (
@@ -129,7 +168,9 @@ async def websocket_game(websocket: WebSocket, room_code: str):
             room["owner"].get("character_selected"),
             room["guest"].get("character_selected"),
         )
-        await websocket.close(code=4001, reason="Both players must select a character before connecting")
+        await websocket.close(
+            code=4001, reason="Both players must select a character before connecting"
+        )
         return
 
     await websocket.accept()
@@ -145,12 +186,19 @@ async def websocket_game(websocket: WebSocket, room_code: str):
             break
 
     if player_index is None:
-        logger.warning("ws rejected room=%s reason=room_already_has_two_sockets", room_code)
+        logger.warning(
+            "ws rejected room=%s reason=room_already_has_two_sockets", room_code
+        )
         await websocket.close(code=4003, reason="Room is full")
         return
 
     opponent_index = 1 - player_index
-    logger.info("ws assigned room=%s player_index=%s opponent_index=%s", room_code, player_index, opponent_index)
+    logger.info(
+        "ws assigned room=%s player_index=%s opponent_index=%s",
+        room_code,
+        player_index,
+        opponent_index,
+    )
 
     # When both WebSocket connected → init combat and send GAME_START
     if players[opponent_index]["ws"] is not None and "combat" not in room:
@@ -160,6 +208,8 @@ async def websocket_game(websocket: WebSocket, room_code: str):
         room["round_wins"] = [0, 0]
         room["current_round"] = 1
         room["status"] = "playing"
+        # Track last known position of each player for range checks
+        room["positions"] = [[0.0, 0.0, 0.0], [0.0, 0.0, -5.0]]
         server_now_ms = int(time.time() * 1000)
         countdown_start_ms = server_now_ms + 1500
 
@@ -239,8 +289,10 @@ async def websocket_game(websocket: WebSocket, room_code: str):
                     room["last_activity"][player_index] = now
 
             if msg_type == "position_sync":
+                pos = message.get("position")
+                if pos and len(pos) == 3 and "positions" in room:
+                    room["positions"][player_index] = pos
                 if now - last_position_log_at >= 1.0:
-                    pos = message.get("position")
                     logger.info(
                         "recv room=%s player_index=%s type=position_sync position=%s isMoving=%s movingBackward=%s",
                         room_code,
@@ -259,13 +311,67 @@ async def websocket_game(websocket: WebSocket, room_code: str):
                     action,
                 )
 
-            if msg_type == "player_action" and action and "combat" in room and not room["combat"].get("ko_processed", False):
+            if (
+                msg_type == "player_action"
+                and action
+                and "combat" in room
+                and not room["combat"].get("ko_processed", False)
+            ):
+                # Range check — block attacks that are too far away
+                if "positions" in room:
+                    dist = _distance(
+                        room["positions"][player_index],
+                        room["positions"][opponent_index],
+                    )
+                    if dist > MAX_ATTACK_RANGE and action in (
+                        "right punch",
+                        "left punch",
+                        "kick",
+                        "special",
+                    ):
+                        logger.info(
+                            "player_action MISSED room=%s player_index=%s action=%s dist=%.2f max=%.2f",
+                            room_code,
+                            player_index,
+                            action,
+                            dist,
+                            MAX_ATTACK_RANGE,
+                        )
+                        # Whiff — inform attacker, no effect on defender
+                        combat_p = room["combat"]["players"]
+                        await websocket.send_json(
+                            {
+                                "type": "action_result",
+                                "action": action,
+                                "damage": 0,
+                                "first_hit": False,
+                                "blocked": False,
+                                "is_special": False,
+                                "missed": True,
+                                "my_hp": combat_p[player_index]["hp"],
+                                "opponent_hp": combat_p[opponent_index]["hp"],
+                                "my_gauge": combat_p[player_index]["special_gauge"],
+                                "opponent_gauge": combat_p[opponent_index][
+                                    "special_gauge"
+                                ],
+                            }
+                        )
+                        continue
+
                 result = process_action(room["combat"], player_index, action)
                 logger.info(
-                    "player_action room=%s player_index=%s action=%s damage=%s blocked=%s ko=%s",
+                    "player_action room=%s player_index=%s action=%s dist=%.2f damage=%s blocked=%s ko=%s",
                     room_code,
                     player_index,
                     action,
+                    (
+                        _distance(
+                            room["positions"][player_index],
+                            room["positions"][opponent_index],
+                        )
+                        if "positions" in room
+                        else -1
+                    ),
                     result["damage"],
                     result["blocked"],
                     result["ko"],
@@ -332,13 +438,25 @@ async def websocket_game(websocket: WebSocket, room_code: str):
 
                     # After a delay send either round_start or game_end
                     asyncio.create_task(
-                        _handle_post_round(room, room_code, players, winner_idx, current_round, current_round_wins)
+                        _handle_post_round(
+                            room,
+                            room_code,
+                            players,
+                            winner_idx,
+                            current_round,
+                            current_round_wins,
+                        )
                     )
 
             else:
                 if players[opponent_index]["ws"]:
                     if msg_type not in {"position_sync", "webrtc_ice"}:
-                        logger.info("relay room=%s player_index=%s type=%s", room_code, player_index, msg_type)
+                        logger.info(
+                            "relay room=%s player_index=%s type=%s",
+                            room_code,
+                            player_index,
+                            msg_type,
+                        )
                     await players[opponent_index]["ws"].send_json(message)
 
     except WebSocketDisconnect:
@@ -349,7 +467,9 @@ async def websocket_game(websocket: WebSocket, room_code: str):
     if afk_triggered:
         if players[opponent_index]["ws"]:
             try:
-                await players[opponent_index]["ws"].close(code=4002, reason="AFK timeout")
+                await players[opponent_index]["ws"].close(
+                    code=4002, reason="AFK timeout"
+                )
             except Exception:
                 pass
     else:
