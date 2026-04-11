@@ -18,7 +18,9 @@ class ActionType(str, Enum):
     L_PUNCH = "left punch"
     KICK    = "kick"
     JUMP    = "jump"
+    WALK    = "walk"
     BLOCK   = "block"
+    HIT     = "hit"         # 맞는 모션 (서버 → 클라 전용)
     SPECIAL = "special"     # 필살기 (게이지 소모)
 
 

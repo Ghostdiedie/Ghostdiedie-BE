@@ -6,6 +6,7 @@
 - **서버:** FastAPI (Python)
 - **DB:** Supabase (PostgreSQL)
 - **실시간:** WebSocket (방 시스템 + 대전)
+- **CV 클라이언트:** OpenCV + MediaPipe (별도 레포: `Ghostdiedie-CV`)
 - **프론트:** React Native (별도 레포)
 - **배포:** Railway
 - **도메인:** `api.ghostdiedie.club` (Porkbun → CNAME → Railway)
@@ -107,6 +108,29 @@ Supabase SQL Editor에서 `schema.sql` 실행하면 테이블 생성됨.
 | Endpoint | 설명 |
 |---|---|
 | `wss://api.ghostdiedie.club/ws/{room_code}` | 실시간 대전 연결 |
+
+## CV 클라이언트 연결
+
+`Ghostdiedie-CV` 레포에서 카메라로 펀치 모션을 감지하고, 이 서버로 WebSocket을 통해 전송합니다.
+
+### 연결 구조
+```
+[카메라] → MediaPipe 모션 감지 → action_queue → WebSocket → [이 서버] → 상대방에게 relay
+```
+
+### CV 클라이언트 실행
+```bash
+cd Ghostdiedie-CV
+pip install -r requirements.txt
+python3 main.py
+```
+
+CV `.env` 설정:
+```
+SERVER_URL=https://api.ghostdiedie.club
+WS_URL=wss://api.ghostdiedie.club
+API_KEY=<API 키>
+```
 
 ## 게임 흐름
 
