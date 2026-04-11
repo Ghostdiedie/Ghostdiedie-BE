@@ -4,65 +4,111 @@
     <meta charset="UTF-8">
     <title>Ghostdiedie WebSocket Test</title>
     <style>
-        body { font-family: monospace; background: #1a1a1a; color: #eee; padding: 20px; }
+        body { font-family: monospace; background: #1a1a1a; color: #eee; padding: 20px; max-width: 900px; margin: 0 auto; }
         h1 { color: #00ff88; }
+        h3 { margin-top: 0; }
         .section { margin: 20px 0; padding: 15px; background: #2a2a2a; border-radius: 8px; }
-        label { display: block; margin: 8px 0 4px; color: #aaa; }
-        input, select { padding: 8px; background: #333; color: #eee; border: 1px solid #555; border-radius: 4px; width: 200px; }
-        button { padding: 8px 16px; margin: 5px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        .btn-create { background: #00ff88; color: #000; }
-        .btn-join { background: #00aaff; color: #000; }
-        .btn-send { background: #ff8800; color: #000; }
-        .btn-disconnect { background: #ff4444; color: #fff; }
-        #log { background: #111; padding: 15px; border-radius: 8px; height: 300px; overflow-y: auto; white-space: pre-wrap; font-size: 13px; }
+        label { display: inline-block; margin: 6px 8px 4px 0; color: #aaa; min-width: 100px; }
+        input { padding: 6px 8px; background: #333; color: #eee; border: 1px solid #555; border-radius: 4px; width: 220px; }
+        button { padding: 8px 14px; margin: 4px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .btn-green { background: #00ff88; color: #000; }
+        .btn-blue { background: #00aaff; color: #000; }
+        .btn-orange { background: #ff8800; color: #000; }
+        .btn-red { background: #ff4444; color: #fff; }
+        .btn-purple { background: #aa66ff; color: #fff; }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+        #log { background: #111; padding: 15px; border-radius: 8px; height: 320px; overflow-y: auto; white-space: pre-wrap; font-size: 13px; line-height: 1.4; }
         .msg-sent { color: #00ff88; }
         .msg-received { color: #00aaff; }
         .msg-system { color: #ff8800; }
         .msg-error { color: #ff4444; }
+        .msg-afk { color: #ff66aa; font-weight: bold; }
+        #afkTimer { font-size: 18px; color: #ff8800; font-weight: bold; margin-left: 12px; }
+        .status { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 12px; margin-left: 8px; }
+        .status-ok { background: #00ff8833; color: #00ff88; }
+        .status-waiting { background: #ff880033; color: #ff8800; }
+        .status-error { background: #ff444433; color: #ff4444; }
     </style>
 </head>
 <body>
     <h1>Ghostdiedie WebSocket Test</h1>
+    <p style="color:#888">Test the full flow: Register → Create/Join Room → Confirm → Connect WS → Fight (or go AFK)</p>
 
     <div class="section">
-        <h3>1. Create or Join a Room</h3>
-        <label>API URL</label>
-        <input id="apiUrl" value="https://api.ghostdiedie.club" style="width:300px">
-        <label>API Key</label>
-        <input id="apiKey" value="REMOVED_EXPOSED_API_KEY" style="width:400px">
-        <label>Player Name</label>
-        <input id="playerName" value="Player1">
-        <label>Character ID (1-5)</label>
-        <input id="characterId" type="number" value="1" min="1" max="5">
-        <br><br>
-        <button class="btn-create" onclick="createRoom()">Create Room</button>
-        <label>Room Code</label>
-        <input id="roomCode" placeholder="ABCD">
-        <button class="btn-join" onclick="joinRoom()">Join Room</button>
+        <h3>0. Config</h3>
+        <div class="row">
+            <label>API URL</label>
+            <input id="apiUrl" value="https://api.ghostdiedie.club" style="width:300px">
+        </div>
+        <div class="row">
+            <label>API Key</label>
+            <input id="apiKey" value="REMOVED_EXPOSED_API_KEY" style="width:400px">
+        </div>
     </div>
 
     <div class="section">
-        <h3>2. Connect WebSocket</h3>
-        <button class="btn-join" onclick="connectWS()">Connect WebSocket</button>
-        <button class="btn-disconnect" onclick="disconnectWS()">Disconnect</button>
+        <h3>1. Register User</h3>
+        <div class="row">
+            <label>Name</label>
+            <input id="playerName" value="TestPlayer">
+            <label>Face ID</label>
+            <input id="faceId" value="test-face-001" style="width:140px">
+            <button class="btn-green" onclick="registerUser()">Register</button>
+        </div>
+        <div class="row">
+            <label>User ID</label>
+            <input id="userId" readonly placeholder="(auto-filled after register)">
+        </div>
     </div>
 
     <div class="section">
-        <h3>3. Send Messages</h3>
-        <button class="btn-send" onclick="sendAction('move', {x: 100, y: 50})">Move (100, 50)</button>
-        <button class="btn-send" onclick="sendAction('attack', {damage: 15})">Attack (15)</button>
-        <button class="btn-send" onclick="sendAction('block', {})">Block</button>
-        <br><br>
-        <label>Custom JSON</label>
-        <input id="customMsg" style="width:400px" value='{"type":"attack","damage":20}'>
-        <button class="btn-send" onclick="sendCustom()">Send</button>
+        <h3>2. Room</h3>
+        <div class="row">
+            <label>Character ID</label>
+            <input id="characterId" type="number" value="1" min="1" max="5" style="width:60px">
+            <button class="btn-green" onclick="createRoom()">Create Room</button>
+            <span style="color:#666">|</span>
+            <label>Code</label>
+            <input id="roomCode" placeholder="12345678" style="width:100px">
+            <button class="btn-blue" onclick="joinRoom()">Join Room</button>
+        </div>
+        <div class="row">
+            <button class="btn-purple" onclick="confirmRoom()">Confirm</button>
+            <button class="btn-orange" onclick="checkStatus()">Check Status</button>
+        </div>
     </div>
 
-    <h3>Log</h3>
+    <div class="section">
+        <h3>3. WebSocket Game</h3>
+        <div class="row">
+            <button class="btn-blue" onclick="connectWS()">Connect WS</button>
+            <button class="btn-red" onclick="disconnectWS()">Disconnect</button>
+            <span id="afkTimer"></span>
+        </div>
+        <div class="row" style="margin-top:10px">
+            <button class="btn-orange" onclick="sendAction('left punch')">Left Punch</button>
+            <button class="btn-orange" onclick="sendAction('right punch')">Right Punch</button>
+            <button class="btn-orange" onclick="sendAction('kick')">Kick</button>
+            <button class="btn-orange" onclick="sendAction('block')">Block</button>
+            <button class="btn-orange" onclick="sendAction('special')">Special</button>
+        </div>
+        <div class="row">
+            <button class="btn-orange" onclick="sendPositionSync(true)">Position (moving)</button>
+            <button class="btn-orange" onclick="sendPositionSync(false)">Position (idle)</button>
+        </div>
+        <p style="color:#888; font-size:12px; margin:8px 0 0">
+            AFK timeout: 5 seconds of no movement/action. Stand still and watch the timer count up.
+        </p>
+    </div>
+
+    <h3>Log <button style="background:#333;color:#888;font-size:11px;padding:3px 8px" onclick="clearLog()">Clear</button></h3>
     <div id="log"></div>
 
 <script>
     let ws = null;
+    let lastActionTime = null;
+    let afkInterval = null;
 
     function log(msg, cls = 'msg-system') {
         const el = document.getElementById('log');
@@ -71,25 +117,53 @@
         el.scrollTop = el.scrollHeight;
     }
 
-    function getHeaders() {
-        return { 'Content-Type': 'application/json', 'X-API-Key': document.getElementById('apiKey').value };
+    function clearLog() {
+        document.getElementById('log').innerHTML = '';
     }
 
-    async function createRoom() {
-        const url = document.getElementById('apiUrl').value;
+    function headers() {
+        return { 'X-API-Key': document.getElementById('apiKey').value };
+    }
+
+    function apiUrl() {
+        return document.getElementById('apiUrl').value;
+    }
+
+    // ── 1. Register ──
+
+    async function registerUser() {
+        const name = document.getElementById('playerName').value;
+        const faceId = document.getElementById('faceId').value;
         try {
-            const res = await fetch(`${url}/api/rooms`, {
-                method: 'POST',
-                headers: getHeaders(),
-                body: JSON.stringify({
-                    player_name: document.getElementById('playerName').value,
-                    character_id: parseInt(document.getElementById('characterId').value),
-                }),
+            const res = await fetch(`${apiUrl()}/api/user/register?name=${encodeURIComponent(name)}&face_id=${encodeURIComponent(faceId)}`, {
+                headers: headers(),
             });
             const data = await res.json();
-            if (data.room_code) {
-                document.getElementById('roomCode').value = data.room_code;
-                log(`Room created. Code: ${data.room_code}`);
+            if (data.user_id) {
+                document.getElementById('userId').value = data.user_id;
+                log(`Registered: user_id=${data.user_id}, name=${data.name}`);
+            } else {
+                log(`Register error: ${JSON.stringify(data)}`, 'msg-error');
+            }
+        } catch (e) {
+            log(`Error: ${e.message}`, 'msg-error');
+        }
+    }
+
+    // ── 2. Room ──
+
+    async function createRoom() {
+        const userId = document.getElementById('userId').value;
+        const charId = document.getElementById('characterId').value;
+        if (!userId) { log('Register first!', 'msg-error'); return; }
+        try {
+            const res = await fetch(`${apiUrl()}/api/room/create?user_id=${userId}&character_id=${charId}`, {
+                headers: headers(),
+            });
+            const data = await res.json();
+            if (data.code) {
+                document.getElementById('roomCode').value = data.code;
+                log(`Room created: code=${data.code}, expires_in=${data.expires_in}s`);
             } else {
                 log(`Error: ${JSON.stringify(data)}`, 'msg-error');
             }
@@ -99,53 +173,131 @@
     }
 
     async function joinRoom() {
-        const url = document.getElementById('apiUrl').value;
+        const userId = document.getElementById('userId').value;
         const code = document.getElementById('roomCode').value;
+        const charId = document.getElementById('characterId').value;
+        if (!userId) { log('Register first!', 'msg-error'); return; }
+        if (!code) { log('Enter room code!', 'msg-error'); return; }
         try {
-            const res = await fetch(`${url}/api/rooms/${code}/join`, {
-                method: 'POST',
-                headers: getHeaders(),
-                body: JSON.stringify({
-                    player_name: document.getElementById('playerName').value,
-                    character_id: parseInt(document.getElementById('characterId').value),
-                }),
+            const res = await fetch(`${apiUrl()}/api/room/join?code=${code}&user_id=${userId}&character_id=${charId}`, {
+                headers: headers(),
             });
             const data = await res.json();
-            log(`Joined room: ${JSON.stringify(data)}`);
+            log(`Joined: ${JSON.stringify(data)}`);
         } catch (e) {
             log(`Error: ${e.message}`, 'msg-error');
         }
     }
 
+    async function confirmRoom() {
+        const userId = document.getElementById('userId').value;
+        const code = document.getElementById('roomCode').value;
+        if (!userId || !code) { log('Need userId and room code', 'msg-error'); return; }
+        try {
+            const res = await fetch(`${apiUrl()}/api/room/confirm?code=${code}&user_id=${userId}`, {
+                headers: headers(),
+            });
+            const data = await res.json();
+            log(`Confirm: confirmed=${data.confirmed}, both_confirmed=${data.both_confirmed}`);
+        } catch (e) {
+            log(`Error: ${e.message}`, 'msg-error');
+        }
+    }
+
+    async function checkStatus() {
+        const code = document.getElementById('roomCode').value;
+        if (!code) { log('Enter room code', 'msg-error'); return; }
+        try {
+            const res = await fetch(`${apiUrl()}/api/room/status?code=${code}`, {
+                headers: headers(),
+            });
+            const data = await res.json();
+            log(`Status: ${JSON.stringify(data, null, 2)}`);
+        } catch (e) {
+            log(`Error: ${e.message}`, 'msg-error');
+        }
+    }
+
+    // ── 3. WebSocket ──
+
     function connectWS() {
         const code = document.getElementById('roomCode').value;
-        const httpUrl = document.getElementById('apiUrl').value;
+        if (!code) { log('Enter room code first', 'msg-error'); return; }
+
+        const httpUrl = apiUrl();
         const wsUrl = httpUrl.replace('https://', 'wss://').replace('http://', 'ws://');
 
         ws = new WebSocket(`${wsUrl}/ws/${code}`);
-
-        ws.onopen = () => log('WebSocket connected.');
-        ws.onmessage = (e) => log(`Received: ${e.data}`, 'msg-received');
-        ws.onclose = (e) => log(`Connection closed (code: ${e.code}, reason: ${e.reason})`, 'msg-error');
-        ws.onerror = () => log('WebSocket error', 'msg-error');
+        ws.onopen = () => {
+            log('WebSocket connected.');
+            startAfkTimer();
+        };
+        ws.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            if (data.type === 'afk_timeout') {
+                log(`AFK TIMEOUT! Player ${data.afk_player_index} was inactive. Room destroyed.`, 'msg-afk');
+                stopAfkTimer();
+            } else if (data.type === 'game_start') {
+                log(`GAME START! You are player ${data.player_index}. HP: ${data.me?.hp}`, 'msg-received');
+                resetAfkTimer();
+            } else if (data.type === 'game_end') {
+                log(`GAME END! Winner: ${data.winner_name}`, 'msg-received');
+                stopAfkTimer();
+            } else {
+                log(`Recv: ${JSON.stringify(data)}`, 'msg-received');
+            }
+        };
+        ws.onclose = (e) => {
+            log(`WS closed (code: ${e.code}, reason: ${e.reason})`, 'msg-error');
+            stopAfkTimer();
+        };
+        ws.onerror = () => log('WS error', 'msg-error');
     }
 
     function disconnectWS() {
         if (ws) { ws.close(); ws = null; }
+        stopAfkTimer();
     }
 
-    function sendAction(type, data) {
-        if (!ws || ws.readyState !== WebSocket.OPEN) { log('WebSocket is not connected.', 'msg-error'); return; }
-        const msg = { type, ...data };
+    function sendAction(action) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) { log('WS not connected', 'msg-error'); return; }
+        const msg = { type: 'player_action', action };
         ws.send(JSON.stringify(msg));
-        log(`Sent: ${JSON.stringify(msg)}`, 'msg-sent');
+        log(`Sent: player_action → ${action}`, 'msg-sent');
+        resetAfkTimer();
     }
 
-    function sendCustom() {
-        if (!ws || ws.readyState !== WebSocket.OPEN) { log('WebSocket is not connected.', 'msg-error'); return; }
-        const msg = document.getElementById('customMsg').value;
-        ws.send(msg);
-        log(`Sent: ${msg}`, 'msg-sent');
+    function sendPositionSync(isMoving) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) { log('WS not connected', 'msg-error'); return; }
+        const msg = { type: 'position_sync', position: [0, 0, 0], facing: 0, isMoving, movingBackward: false };
+        ws.send(JSON.stringify(msg));
+        log(`Sent: position_sync (isMoving=${isMoving})`, 'msg-sent');
+        if (isMoving) resetAfkTimer();
+    }
+
+    // ── AFK Timer Display ──
+
+    function startAfkTimer() {
+        lastActionTime = Date.now();
+        if (afkInterval) clearInterval(afkInterval);
+        afkInterval = setInterval(updateAfkDisplay, 100);
+    }
+
+    function resetAfkTimer() {
+        lastActionTime = Date.now();
+    }
+
+    function stopAfkTimer() {
+        if (afkInterval) { clearInterval(afkInterval); afkInterval = null; }
+        document.getElementById('afkTimer').textContent = '';
+    }
+
+    function updateAfkDisplay() {
+        if (!lastActionTime) return;
+        const elapsed = ((Date.now() - lastActionTime) / 1000).toFixed(1);
+        const el = document.getElementById('afkTimer');
+        el.textContent = `Idle: ${elapsed}s / 5s`;
+        el.style.color = elapsed >= 4 ? '#ff4444' : elapsed >= 2 ? '#ff8800' : '#00ff88';
     }
 </script>
 </body>
