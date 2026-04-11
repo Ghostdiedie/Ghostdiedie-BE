@@ -203,26 +203,19 @@ async def websocket_game(websocket: WebSocket, room_code: str):
         return
 
     room = rooms[room_code]
+    await websocket.accept()
 
-    # 쿼리에서 플레이어 이름 확인
-    player_name = websocket.query_params.get("player_name")
-    if not player_name:
-        await websocket.close(code=4001, reason="player_name required")
-        return
-
-    # 등록된 플레이어인지 확인
+    # 빈 슬롯에 WebSocket 연결
     player_index = None
     for i, p in enumerate(room["players"]):
-        if p["name"] == player_name:
+        if p["ws"] is None:
+            p["ws"] = websocket
             player_index = i
             break
 
     if player_index is None:
-        await websocket.close(code=4003, reason="Player not in this room")
+        await websocket.close(code=4003, reason="Room is full")
         return
-
-    await websocket.accept()
-    room["players"][player_index]["ws"] = websocket
 
     # 상대에게 입장 알림
     opponent_index = 1 - player_index
