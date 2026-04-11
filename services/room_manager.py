@@ -5,7 +5,7 @@ import threading
 
 rooms: dict[str, dict] = {}
 
-ROOM_EXPIRE_SECONDS = 10  # 10초
+ROOM_EXPIRE_SECONDS = 60  # 10초
 
 
 def generate_room_code() -> str:

@@ -28,11 +28,13 @@ def create_room(data: RoomCreate, _: str = Depends(verify_api_key)):
         ],
     }
     
-    return RoomResponse(
-        room_code=code,
-        status=RoomStatus.WAITING,
-        players=[PlayerState(**{k: v for k, v in rooms[code]["players"][0].items() if k != "ws"})],
-    )
+    return {
+        "room_code": code,
+        "status": RoomStatus.WAITING,
+        "players": [PlayerState(**{k: v for k, v in rooms[code]["players"][0].items() if k != "ws"})],
+        "expires_in_seconds": ROOM_EXPIRE_SECONDS,
+        "message": f"Room created! Share the code. Expires in {ROOM_EXPIRE_SECONDS} seconds.",
+    }
 
 
 @router.post("/api/rooms/{room_code}/join", response_model=RoomResponse)
@@ -44,7 +46,7 @@ def join_room(room_code: str, data: RoomJoin, _: str = Depends(verify_api_key)):
     room = rooms[room_code]
     if time.time() - room.get("created_at", 0) > ROOM_EXPIRE_SECONDS:
         del rooms[room_code]
-        raise HTTPException(status_code=410, detail="Room expired")
+        raise HTTPException(status_code=410, detail=f"Room code {room_code} has expired. Please create a new room.")
     if len(room["players"]) >= 2:
         raise HTTPException(status_code=400, detail="Room is full")
     stats = get_character_stats(data.character_id)
@@ -77,11 +79,19 @@ def get_room(room_code: str, _: str = Depends(verify_api_key)):
     if room_code not in rooms:
         raise HTTPException(status_code=404, detail="Room not found")
     room = rooms[room_code]
-    return RoomResponse(
-        room_code=room_code,
-        status=room["status"],
-        players=[
+    elapsed = time.time() - room.get("created_at", time.time())
+    remaining = max(0, ROOM_EXPIRE_SECONDS - int(elapsed))
+
+    if remaining == 0 and room.get("status") != "playing":
+        del rooms[room_code]
+        raise HTTPException(status_code=410, detail=f"Room code {room_code} has expired. Please create a new room.")
+
+    return {
+        "room_code": room_code,
+        "status": room["status"],
+        "players": [
             PlayerState(**{k: v for k, v in p.items() if k != "ws"})
             for p in room["players"]
         ],
-    )
+        "expires_in_seconds": remaining,
+    }
