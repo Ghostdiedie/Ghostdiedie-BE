@@ -11,13 +11,13 @@ Ghostdiedie combat damage engine.
 import time
 
 # Default character combat stats
-# HP 200 (uniform) — punches deal ~4-5% per hit, fights last ~20-35 exchanges
+# Punch deals ~6% HP → KO in ~17 clean hits, matches last ~60-90s
 DEFAULT_ATTACK = {
-    1: 8,    # Jin       — balanced
-    2: 7,    # Kazuya    — low damage, high HP
-    3: 10,   # Heihachi  — high damage, lower durability
-    4: 9,    # Paul      — heavy hitter
-    5: 7,    # King      — grappler style, low base attack
+    1: 12,   # Jin       — balanced all-rounder
+    2: 10,   # Kazuya    — low base, high HP compensates
+    3: 15,   # Heihachi  — glass cannon, hits hard
+    4: 13,   # Paul      — heavy hitter
+    5: 10,   # King      — grappler, durable but slow damage
 }
 
 DEFAULT_HP = {
@@ -36,14 +36,14 @@ DEFAULT_MAX_GAUGE = {
     5: 100,
 }
 
-FIRST_HIT_WINDOW = 1.5       # Seconds of inactivity that grants first-hit bonus
-FIRST_HIT_MULTIPLIER = 1.25  # Subtle bonus for landing the first strike
-BLOCK_REDUCTION = 0.2        # Damage taken while blocking (80% reduction)
-SPECIAL_MULTIPLIER = 2.2     # Special deals ~2x normal — impactful but not one-shot
+FIRST_HIT_WINDOW = 1.0       # Seconds of inactivity that grants counter-hit bonus
+FIRST_HIT_MULTIPLIER = 1.3   # Counter-hit bonus (Tekken-style ~1.2-1.3x)
+BLOCK_REDUCTION = 0.5        # Damage taken while blocking (50% reduction, not free)
+SPECIAL_MULTIPLIER = 3.0     # Special = ~20% of HP, worth saving gauge for
 SPECIAL_GAUGE_COST = 100     # Full gauge required for special
-KICK_MULTIPLIER = 1.4        # Kicks are noticeably stronger than punches
-GAUGE_PER_HIT = 12           # Gauge gained per successful attack
-GAUGE_PER_BLOCK = 8          # Slightly more gauge for blocking (reward defensive play)
+KICK_MULTIPLIER = 1.3        # Kicks hit harder than punches but slower on FE
+GAUGE_PER_HIT = 12           # Gauge gained per successful attack (~8 hits to fill)
+GAUGE_PER_BLOCK = 8          # Reward defensive play
 
 # Attack action list
 ATTACK_ACTIONS = ("right punch", "left punch", "kick", "special")
