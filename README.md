@@ -1,55 +1,55 @@
 # Ghostdiedie Club Backend
 
-모션 인식 격투 게임 **Ghostdiedie**의 백엔드 서버입니다.
-FastAPI + Supabase + WebSocket 기반으로 방 매칭, 실시간 전투, 전적 관리를 처리합니다.
+Backend server for **Ghostdiedie**, a motion-based fighting game.
+Built with FastAPI + Supabase + WebSocket for room matching, real-time combat, and match history.
 
 ---
 
-## 기술 스택
+## Tech Stack
 
-| 영역 | 기술 |
+| Area | Technology |
 |---|---|
-| 서버 프레임워크 | FastAPI (Python) |
-| 데이터베이스 | Supabase (PostgreSQL) |
-| 실시간 통신 | WebSocket (전투) |
-| 얼굴 처리 | OpenCV + Pillow (256×256 원형 크롭) |
-| 배포 | Railway |
-| 도메인 | `api.ghostdiedie.club` (Porkbun → CNAME → Railway) |
+| Server Framework | FastAPI (Python) |
+| Database | Supabase (PostgreSQL) |
+| Real-time | WebSocket (combat) |
+| Face Processing | OpenCV + Pillow (256×256 circular crop) |
+| Deployment | Railway |
+| Domain | `api.ghostdiedie.club` (Porkbun → CNAME → Railway) |
 
 ---
 
-## 프로젝트 구조
+## Project Structure
 
 ```
 files/
-├── main.py                 # FastAPI 앱 엔트리포인트
+├── main.py                 # FastAPI app entry point
 ├── core/
-│   ├── config.py           # Supabase 클라이언트, 환경 변수
-│   └── auth.py             # API 키 인증
+│   ├── config.py           # Supabase client, environment variables
+│   └── auth.py             # API key authentication
 ├── routers/
-│   ├── face.py             # 얼굴 업로드 / 크롭 API
-│   ├── users.py            # 유저 등록 API
-│   ├── rooms.py            # 방 생성 / 참가 / 확인 API
-│   ├── characters.py       # 캐릭터 조회 / 이미지 API
-│   ├── matches.py          # 전적 저장 / 리더보드 API
-│   └── websocket.py        # WebSocket 전투 로직
+│   ├── face.py             # Face upload / crop API
+│   ├── users.py            # User registration API
+│   ├── rooms.py            # Room create / join / confirm API
+│   ├── characters.py       # Character query / image API
+│   ├── matches.py          # Match result / leaderboard API
+│   └── websocket.py        # WebSocket battle logic
 ├── models/
-│   └── schemas.py          # Pydantic 모델 (요청/응답/WS 메시지)
+│   └── schemas.py          # Pydantic models (request/response/WS messages)
 ├── services/
-│   ├── room_manager.py     # 방 관리 (인메모리)
-│   ├── user_manager.py     # 유저 관리
-│   └── combat.py           # 데미지 계산 / 전투 로직
-├── schema.sql              # DB 스키마 (Supabase SQL Editor용)
-├── test_ws.html            # WebSocket 테스트 페이지
-├── Procfile                # Railway 배포 설정
+│   ├── room_manager.py     # Room management (in-memory)
+│   ├── user_manager.py     # User management
+│   └── combat.py           # Damage calculation / combat logic
+├── schema.sql              # DB schema (for Supabase SQL Editor)
+├── test_ws.html            # WebSocket test page
+├── Procfile                # Railway deployment config
 └── requirements.txt
 ```
 
 ---
 
-## 로컬 셋업
+## Local Setup
 
-### 1. 환경 구성
+### 1. Environment Setup
 
 ```bash
 cd files
@@ -58,9 +58,9 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. 환경 변수
+### 2. Environment Variables
 
-프로젝트 루트에 `.env` 파일 생성:
+Create a `.env` file in the project root:
 
 ```
 SUPABASE_URL=https://xxxxxxxxxxxxxxxxxxxx.supabase.co
@@ -68,74 +68,75 @@ SUPABASE_KEY=your-anon-key-here
 API_KEY=your-api-key-here
 ```
 
-실제 값은 민수에게 문의하세요.
+Ask Minsoo for the actual values.
 
-### 3. 서버 실행
+### 3. Run the Server
 
 ```bash
 uvicorn main:app --reload --port 8000
 ```
 
-### 4. 확인
+### 4. Verify
 
-- http://localhost:8000 — 서버 상태
-- http://localhost:8000/docs — Swagger API 문서
-- http://localhost:8000/test — WebSocket 테스트 페이지
+- http://localhost:8000 — server status
+- http://localhost:8000/docs — Swagger API docs
+- http://localhost:8000/test — WebSocket test page
 
 ---
 
-## 배포 URL
+## Deployment URLs
 
-| 용도 | URL |
+| Purpose | URL |
 |---|---|
 | API | `https://api.ghostdiedie.club` |
-| API 문서 | `https://api.ghostdiedie.club/docs` |
-| WS 테스트 | `https://api.ghostdiedie.club/test` |
+| API Docs | `https://api.ghostdiedie.club/docs` |
+| WS Test | `https://api.ghostdiedie.club/test` |
 
 ---
 
-## 인증
+## Authentication
 
-모든 `/api/*` HTTP 엔드포인트는 `X-API-Key` 헤더가 필요합니다 (WebSocket 제외).
+All `/api/*` HTTP endpoints require the `X-API-Key` header (WebSocket excluded).
 
 ```
-X-API-Key: (민수에게 문의)
+X-API-Key: (ask Minsu)
 ```
 
 ---
 
-## 클라이언트 전체 플로우
+## Full Client Flow
 
 ```
-[로비 페이지]
-  1. 사진 촬영/선택
+[Lobby Page]
+  1. Take/select photo
      POST /api/face (file) → { face_id, face_url }
 
-  2. 이름 입력 후 Create/Join 클릭
+  2. Enter name, click Create/Join
      GET /api/user/register?name=...&face_id=... → { user_id, name, profile_image_url }
 
-[방 생성 페이지]
-  3. 방 생성
+[Create Room Page]
+  3. Create room
      GET /api/room/create?user_id=...&character_id=... → { code, owner, expires_in }
 
-  4. 상대 대기 (1.5초 간격 폴링)
+  4. Wait for opponent (poll every 1.5s)
      GET /api/room/status?code=... → { status, owner, guest, both_confirmed }
 
-  5. Confirm → GET /api/room/confirm?code=...&user_id=...
-     → both_confirmed가 true가 될 때까지 폴링
+  5. Click Confirm
+     GET /api/room/confirm?code=...&user_id=...
+     → keep polling room/status until both_confirmed is true
 
-  6. 양쪽 confirm 완료 → WebSocket 연결
+  6. Both confirmed → connect WebSocket
      wss://{host}/ws/{code}
-     → 양쪽 연결 시 game_start 전송 → 게임 시작
+     → server sends game_start when both connected → game begins
 
-[방 참가 페이지]
-  3. 코드 입력 후 Join
+[Join Room Page]
+  3. Enter code, click Join
      GET /api/room/join?code=...&user_id=...&character_id=...
 
-  4. Confirm → 폴링 → WebSocket 연결 (위와 동일)
+  4. Confirm → poll → WebSocket connect (same as above)
 
-[게임 페이지]
-  WebSocket 메시지로 실시간 전투
+[Game Page]
+  Real-time combat via WebSocket messages
   Client → Server: { type: "player_action", action: "..." }
   Server → Client: action_result / hit_received / game_end / opponent_left
 ```
@@ -148,7 +149,7 @@ X-API-Key: (민수에게 문의)
 
 | Method | Endpoint | Params | Response |
 |---|---|---|---|
-| `POST` | `/api/face` | `file` (multipart image) | `{ face_id, face_url }` — 256×256 원형 크롭 PNG (base64) |
+| `POST` | `/api/face` | `file` (multipart image) | `{ face_id, face_url }` — 256×256 circular crop PNG (base64) |
 
 ### User
 
@@ -168,9 +169,9 @@ X-API-Key: (민수에게 문의)
 
 **Room status flow**: `waiting` → `ready` → `confirmed` → `playing` → `finished`
 
-**owner/guest 응답 형식**:
+**owner/guest response format**:
 ```json
-{ "user_id": "abc123", "name": "홍길동", "profile_image_url": "data:image/png;base64,...", "role": "owner" }
+{ "user_id": "abc123", "name": "Player1", "profile_image_url": "data:image/png;base64,...", "role": "owner" }
 ```
 
 ### Characters
@@ -180,14 +181,14 @@ X-API-Key: (민수에게 문의)
 | `GET` | `/api/characters` | — | `[{ id, name, max_hp, max_special_gauge, image_url }]` |
 | `GET` | `/api/characters/{id}` | — | `{ id, name, max_hp, attack, max_special_gauge, image_url }` |
 | `POST` | `/api/characters/{id}/image` | `file` (WebP) | `{ character_id, image_url }` |
-| `GET` | `/api/characters/{id}/image` | — | WebP image binary (인증 불필요) |
+| `GET` | `/api/characters/{id}/image` | — | WebP image binary (no auth required) |
 
 ### Matches
 
 | Method | Endpoint | Params | Response |
 |---|---|---|---|
 | `POST` | `/api/matches` | JSON body | `{ match_id, created_at }` |
-| `GET` | `/api/leaderboard` | `limit?` (기본 10) | `[{ player_name, wins }]` |
+| `GET` | `/api/leaderboard` | `limit?` (default 10) | `[{ player_name, wins }]` |
 
 ---
 
@@ -195,17 +196,17 @@ X-API-Key: (민수에게 문의)
 
 ### `wss://{host}/ws/{room_code}`
 
-**연결 조건**: 양쪽 모두 `/api/room/confirm` 완료 후에만 연결 가능 (미확인 시 4001 close)
+**Connection requirement**: Both players must complete `/api/room/confirm` before connecting (otherwise closed with 4001)
 
 ### Server → Client
 
-| Type | 시점 | Payload |
+| Type | When | Payload |
 |---|---|---|
-| `game_start` | 양쪽 WS 연결 완료 | `{ player_index, me: PlayerState, opponent: PlayerState }` |
-| `action_result` | 내가 공격 | `{ action, damage, first_hit, blocked, is_special, my_hp, opponent_hp, my_gauge, opponent_gauge }` |
-| `hit_received` | 상대가 공격 | `{ action, damage, first_hit, blocked, is_special, my_hp, opponent_hp, my_gauge, opponent_gauge }` |
-| `game_end` | KO 발생 | `{ winner_index, winner_name, loser_name, duration_seconds }` |
-| `opponent_left` | 상대 연결 끊김 | `{}` |
+| `game_start` | Both WS connected | `{ player_index, me: PlayerState, opponent: PlayerState }` |
+| `action_result` | You attacked | `{ action, damage, first_hit, blocked, is_special, my_hp, opponent_hp, my_gauge, opponent_gauge }` |
+| `hit_received` | Opponent attacked | `{ action, damage, first_hit, blocked, is_special, my_hp, opponent_hp, my_gauge, opponent_gauge }` |
+| `game_end` | KO occurs | `{ winner_index, winner_name, loser_name, duration_seconds }` |
+| `opponent_left` | Opponent disconnected | `{}` |
 
 ### Client → Server
 
@@ -216,39 +217,39 @@ X-API-Key: (민수에게 문의)
 ### PlayerState
 
 ```json
-{ "name": "홍길동", "character_id": 1, "profile_image_url": "data:...", "hp": 100, "special_gauge": 0 }
+{ "name": "Player1", "character_id": 1, "profile_image_url": "data:...", "hp": 100, "special_gauge": 0 }
 ```
 
 ---
 
-## 전투 시스템
+## Combat System
 
-서버에서 데미지를 계산합니다. 클라이언트는 액션만 전송하면 됩니다.
+The server calculates all damage. Clients only send actions.
 
-| Action | 효과 |
+| Action | Effect |
 |---|---|
-| `right punch` / `left punch` | 기본 데미지 (캐릭터 attack) |
-| `kick` | 1.2× 데미지 |
-| `block` | 방어 (피해 50% 감소, 게이지 +5) |
-| `special` | 필살기 (게이지 100 소모, 3× 데미지) |
-| `jump` / `walk` | 이동 (피해 없음) |
+| `right punch` / `left punch` | Base damage (character attack stat) |
+| `kick` | 1.2× damage |
+| `block` | Defend (50% damage reduction, gauge +5) |
+| `special` | Ultimate (costs 100 gauge, 3× damage) |
+| `jump` / `walk` | Movement (no damage) |
 
-- **First-hit bonus**: 상대가 0.3초 내 공격 안 했으면 1.5×
-- **Gauge charge**: 공격 시 +15, 방어 시 +5
+- **First-hit bonus**: If opponent hasn't attacked within 0.3s, damage × 1.5
+- **Gauge charge**: +15 on attack, +5 on defend
 
 ---
 
-## DB 스키마
+## DB Schema
 
-`schema.sql`을 Supabase SQL Editor에서 실행하세요.
+Run `schema.sql` in the Supabase SQL Editor.
 
-| 테이블 | 설명 |
+| Table | Description |
 |---|---|
-| `characters` | 캐릭터 데이터 (이름, HP, 공격력, 필살기 게이지) |
-| `users` | 유저 데이터 (이름, 프로필 이미지) |
-| `matches` | 전적 기록 (방 코드, 승자/패자, 소요 시간) |
+| `characters` | Character data (name, HP, attack power, special gauge) |
+| `users` | User data (name, profile image) |
+| `matches` | Match records (room code, winner/loser, duration) |
 
-### 기본 캐릭터
+### Default Characters
 
 | ID | Name | HP | Attack | Special Gauge |
 |---|---|---|---|---|
@@ -260,7 +261,7 @@ X-API-Key: (민수에게 문의)
 
 ---
 
-## 관련 저장소
+## Related Repositories
 
-- **Ghostdiedie-FE** — React + Three.js 프론트엔드 (3D 대전 씬)
-- **Ghostdiedie-CV** — 로컬 Python CV 브리지 (웹캠 동작 감지)
+- **Ghostdiedie-FE** — React + Three.js frontend (3D arena battle scene)
+- **Ghostdiedie-CV** — Local Python CV bridge (webcam motion detection)
