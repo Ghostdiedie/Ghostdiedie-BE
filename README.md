@@ -115,7 +115,7 @@ Supabase SQL Editor에서 `schema.sql` 실행하면 테이블 생성됨.
 
 ### 연결 구조
 ```
-[카메라] → MediaPipe 모션 감지 → action_queue → WebSocket → [이 서버] → 상대방에게 relay
+[카메라] → MediaPipe 모션 감지 → action_queue → WebSocket → [이 서버] → 데미지 계산 → 양쪽에 결과 전송
 ```
 
 ### CV 클라이언트 실행
@@ -142,29 +142,41 @@ API_KEY=<API 키>
 2. 플레이어2 → `POST /api/rooms/ABCD/join` → 입장 → 상태: `ready`
 3. 둘 다 → `wss://api.ghostdiedie.club/ws/ABCD` WebSocket 연결
 4. 둘 다 연결되면 → `game_start` 메시지 자동 전송 → 상태: `playing`
-5. 공격/이동 JSON 주고받기 → 상대에게 자동 전달
-6. 게임 종료 → `POST /api/matches`로 결과 저장 → 상태: `finished`
+5. CV 모션 감지 → `player_action` 전송 → **서버가 데미지 계산** → 양쪽에 결과 전송
+6. HP 0 이하 → `game_end` 자동 전송 → 상태: `finished`
 
-### 액션 타입
-| 액션 | 설명 |
-|---|---|
-| `right punch` | 오른쪽 주먹 |
-| `left punch` | 왼쪽 주먹 |
-| `kick` | 발차기 |
-| `jump` | 점프 |
-| `block` | 방어 |
-| `special` | 필살기 (게이지 소모) |
+### 전투 시스템
+서버가 데미지를 계산합니다. 클라이언트는 액션만 전송하면 됩니다.
+
+| 액션 | 데미지 | 설명 |
+|---|---|---|
+| `right punch` | 캐릭터 attack | 오른쪽 주먹 |
+| `left punch` | 캐릭터 attack | 왼쪽 주먹 |
+| `kick` | attack x 1.2 | 발차기 (펀치보다 강함) |
+| `block` | - | 방어 (받는 데미지 50% 감소, 게이지 +5) |
+| `special` | attack x 3.0 | 필살기 (게이지 100 소모) |
+| `jump` | - | 점프 (이동) |
+| `walk` | - | 걷기 (이동) |
+| `idle` | - | 대기 |
+
+**선빵 보너스:** 상대가 0.3초 내 공격하지 않았으면 데미지 **1.5배**
+**게이지 충전:** 공격 시 +15, 방어 시 +5
 
 ### WebSocket 메시지 타입
-| 타입 | 방향 | 설명 |
+
+**클라 → 서버:**
+| 타입 | 설명 |
+|---|---|
+| `player_action` | 플레이어 동작 전송 (`action` 필드 필수) |
+
+**서버 → 클라:**
+| 타입 | 대상 | 설명 |
 |---|---|---|
-| `game_start` | 서버 → 클라 | 두 플레이어 연결 완료, 게임 시작 |
-| `player_action` | 클라 → 서버 → 상대 | 플레이어 동작 전달 |
-| `state_update` | 클라 → 서버 → 상대 | HP/게이지 동기화 |
-| `round_start` | 서버 → 클라 | 라운드 시작 |
-| `round_end` | 서버 → 클라 | 라운드 종료 |
-| `game_end` | 서버 → 클라 | 게임 종료, 최종 승자 |
-| `opponent_left` | 서버 → 클라 | 상대 퇴장 |
+| `game_start` | 양쪽 | 게임 시작 (플레이어 정보, HP, 게이지) |
+| `action_result` | 공격자 | 내 공격 결과 (데미지, 선빵, 방어 여부, 양쪽 HP/게이지) |
+| `hit_received` | 수비자 | 맞은 결과 (데미지, 선빵, 방어 여부, 양쪽 HP/게이지) |
+| `game_end` | 양쪽 | KO — 승자/패자/소요시간 |
+| `opponent_left` | 남은 쪽 | 상대 퇴장 |
 
 ### 요청 예시
 
@@ -203,19 +215,51 @@ POST /api/matches
 }
 ```
 
-**WebSocket 메시지 (player_action):**
+**WebSocket 송신 (클라 → 서버):**
 ```json
-{ "type": "player_action", "action": "right punch", "damage": 15 }
+{ "type": "player_action", "action": "right punch" }
 ```
 
-**WebSocket 메시지 (state_update):**
+**WebSocket 수신 — action_result (공격자에게):**
 ```json
 {
-  "type": "state_update",
-  "player_hp": 85,
-  "opponent_hp": 70,
-  "player_gauge": 30,
-  "opponent_gauge": 20
+  "type": "action_result",
+  "action": "right punch",
+  "damage": 22,
+  "first_hit": true,
+  "blocked": false,
+  "is_special": false,
+  "my_hp": 100,
+  "opponent_hp": 88,
+  "my_gauge": 15,
+  "opponent_gauge": 0
+}
+```
+
+**WebSocket 수신 — hit_received (수비자에게):**
+```json
+{
+  "type": "hit_received",
+  "action": "right punch",
+  "damage": 22,
+  "first_hit": true,
+  "blocked": false,
+  "is_special": false,
+  "my_hp": 88,
+  "opponent_hp": 100,
+  "my_gauge": 0,
+  "opponent_gauge": 15
+}
+```
+
+**WebSocket 수신 — game_end (양쪽에게):**
+```json
+{
+  "type": "game_end",
+  "winner_index": 0,
+  "winner_name": "민수",
+  "loser_name": "철수",
+  "duration_seconds": 87
 }
 ```
 
@@ -250,12 +294,18 @@ ws.onmessage = (e) => {
   switch (data.type) {
     case "game_start":
       // data.player_index (0=P1, 1=P2), data.me, data.opponent
+      // data.me.hp, data.me.special_gauge 등
       break;
-    case "player_action":
-      // data.action ("right punch", "kick", ...), data.damage
+    case "action_result":
+      // 내 공격 결과: data.damage, data.first_hit, data.blocked, data.is_special
+      // data.my_hp, data.opponent_hp, data.my_gauge, data.opponent_gauge
       break;
-    case "state_update":
-      // data.player_hp, data.opponent_hp, data.player_gauge, data.opponent_gauge
+    case "hit_received":
+      // 맞은 결과: data.damage, data.first_hit, data.blocked, data.is_special
+      // data.my_hp, data.opponent_hp, data.my_gauge, data.opponent_gauge
+      break;
+    case "game_end":
+      // data.winner_index, data.winner_name, data.loser_name, data.duration_seconds
       break;
     case "opponent_left":
       // 상대 퇴장
@@ -263,6 +313,6 @@ ws.onmessage = (e) => {
   }
 };
 
-// 공격 보내기
-ws.send(JSON.stringify({ type: "player_action", action: "right punch", damage: 15 }));
+// 공격 보내기 (데미지는 서버가 계산)
+ws.send(JSON.stringify({ type: "player_action", action: "right punch" }));
 ```

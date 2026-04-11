@@ -2,12 +2,12 @@ from fastapi import APIRouter, HTTPException, Depends
 from core.config import supabase
 from core.auth import verify_api_key
 
-router = APIRouter()
+router = APIRouter(tags=["Characters"])
 
 
 @router.get("/api/characters")
 def get_characters(_: str = Depends(verify_api_key)):
-    """선택 가능한 캐릭터 전체 목록"""
+    """선택 가능한 캐릭터 전체 목록 (ID, 이름, HP, 공격력, 필살기 게이지)"""
     try:
         result = supabase.table("characters").select("*").execute()
         return result.data

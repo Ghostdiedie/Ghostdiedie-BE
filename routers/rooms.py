@@ -3,7 +3,7 @@ from core.auth import verify_api_key
 from models.schemas import RoomCreate, RoomJoin, RoomResponse, RoomStatus, PlayerState
 from services.room_manager import rooms, generate_room_code
 
-router = APIRouter()
+router = APIRouter(tags=["Rooms"])
 
 
 @router.post("/api/rooms", response_model=RoomResponse)
