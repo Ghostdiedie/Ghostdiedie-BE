@@ -10,6 +10,16 @@ create table if not exists characters (
   description       text
 );
 
+-- Users table
+create table if not exists users (
+  id                text primary key,
+  name              text not null,
+  profile_image_url text,
+  created_at        timestamptz not null default now()
+);
+
+alter table users disable row level security;
+
 -- Match results table
 create table if not exists matches (
   id                  uuid primary key default gen_random_uuid(),
