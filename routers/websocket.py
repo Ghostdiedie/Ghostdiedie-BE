@@ -352,7 +352,7 @@ async def websocket_game(websocket: WebSocket, room_code: str):
                             dist,
                             MAX_ATTACK_RANGE,
                         )
-                        # Whiff — inform attacker, no effect on defender
+                        # Whiff — inform attacker, no effect on defender'
                         combat_p = room["combat"]["players"]
                         await websocket.send_json(
                             {
