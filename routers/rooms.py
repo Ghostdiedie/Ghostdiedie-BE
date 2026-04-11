@@ -1,7 +1,9 @@
+import time
 from fastapi import APIRouter, HTTPException, Depends
 from core.auth import verify_api_key
 from models.schemas import RoomCreate, RoomJoin, RoomResponse, RoomStatus, PlayerState
-from services.room_manager import rooms, generate_room_code
+from services.room_manager import rooms, generate_room_code, ROOM_EXPIRE_SECONDS
+from services.combat import get_character_stats
 
 router = APIRouter(tags=["Rooms"])
 
@@ -10,19 +12,22 @@ router = APIRouter(tags=["Rooms"])
 def create_room(data: RoomCreate, _: str = Depends(verify_api_key)):
     """방 생성 — 방 코드 반환"""
     code = generate_room_code()
+    stats = get_character_stats(data.character_id)
     rooms[code] = {
         "status": RoomStatus.WAITING,
+        "created_at": time.time(),
         "players": [
             {
                 "name": data.player_name,
                 "character_id": data.character_id,
                 "profile_image_url": data.profile_image_url,
-                "hp": 100,
-                "special_gauge": 0,
+                "hp": stats["hp"],
+                "special_gauge": stats["special_gauge"],
                 "ws": None,
             }
         ],
     }
+    
     return RoomResponse(
         room_code=code,
         status=RoomStatus.WAITING,
@@ -37,15 +42,19 @@ def join_room(room_code: str, data: RoomJoin, _: str = Depends(verify_api_key)):
     if room_code not in rooms:
         raise HTTPException(status_code=404, detail="Room not found")
     room = rooms[room_code]
+    if time.time() - room.get("created_at", 0) > ROOM_EXPIRE_SECONDS:
+        del rooms[room_code]
+        raise HTTPException(status_code=410, detail="Room expired")
     if len(room["players"]) >= 2:
         raise HTTPException(status_code=400, detail="Room is full")
+    stats = get_character_stats(data.character_id)
     room["players"].append(
         {
             "name": data.player_name,
             "character_id": data.character_id,
             "profile_image_url": data.profile_image_url,
-            "hp": 100,
-            "special_gauge": 0,
+            "hp": stats["hp"],
+            "special_gauge": stats["special_gauge"],
             "ws": None,
         }
     )

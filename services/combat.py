@@ -48,24 +48,31 @@ GAUGE_PER_BLOCK = 5           # 방어 시 게이지 충전량
 ATTACK_ACTIONS = ("right punch", "left punch", "kick", "special")
 
 
+def get_character_stats(character_id: int) -> dict:
+    """캐릭터 ID → 전투 스탯 반환 (rooms.py, combat 모두 이걸 사용)"""
+    return {
+        "hp": DEFAULT_HP.get(character_id, 100),
+        "max_hp": DEFAULT_HP.get(character_id, 100),
+        "attack": DEFAULT_ATTACK.get(character_id, 15),
+        "special_gauge": 0,
+        "max_gauge": DEFAULT_MAX_GAUGE.get(character_id, 100),
+    }
+
+
 def init_combat_state(players: list[dict]) -> dict:
-    """방 생성 시 전투 상태 초기화"""
+    """WebSocket 연결 시 전투 상태 초기화 (room player 데이터 기반)"""
     state = {
         "start_time": None,
         "players": [],
     }
     for p in players:
-        cid = p["character_id"]
-        state["players"].append({
-            "hp": DEFAULT_HP.get(cid, 100),
-            "max_hp": DEFAULT_HP.get(cid, 100),
-            "attack": DEFAULT_ATTACK.get(cid, 15),
-            "special_gauge": 0,
-            "max_gauge": DEFAULT_MAX_GAUGE.get(cid, 100),
+        stats = get_character_stats(p["character_id"])
+        stats.update({
             "last_action": None,
             "last_action_time": 0.0,
             "blocking": False,
         })
+        state["players"].append(stats)
     return state
 
 
