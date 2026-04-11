@@ -10,6 +10,70 @@ from models.schemas import WSGameStart, WSOpponentLeft, WSType, PlayerState
 router = APIRouter()
 logger = logging.getLogger("ghostdiedie.websocket")
 
+
+async def _handle_post_round(room: dict, room_code: str, players: list, winner_idx: int, current_round: int, current_round_wins: list):
+    """Wait after a round ends, then send round_start or game_end."""
+    loser_idx = 1 - winner_idx
+    await asyncio.sleep(3.5)
+
+    if current_round_wins[winner_idx] >= 2:
+        duration = int(time.time() - room["combat"]["start_time"])
+        game_end_msg = {
+            "type": "game_end",
+            "winner_index": winner_idx,
+            "winner_name": players[winner_idx]["name"],
+            "loser_name": players[loser_idx]["name"],
+            "duration_seconds": duration,
+            "round_wins": current_round_wins,
+        }
+        room["status"] = "finished"
+        for idx in range(2):
+            if players[idx]["ws"]:
+                try:
+                    await players[idx]["ws"].send_json(game_end_msg)
+                except Exception:
+                    pass
+        logger.info("game_end room=%s winner_index=%s duration=%s", room_code, winner_idx, duration)
+    else:
+        next_round = current_round + 1
+        room["current_round"] = next_round
+        for i, combat_player in enumerate(room["combat"]["players"]):
+            stats = get_character_stats(players[i]["character_id"])
+            combat_player["hp"] = stats["hp"]
+            combat_player["max_hp"] = stats["max_hp"]
+            combat_player["special_gauge"] = 0
+            combat_player["last_action"] = None
+            combat_player["last_action_time"] = 0.0
+            combat_player["blocking"] = False
+        room["combat"]["ko_processed"] = False  # re-enable combat
+
+        server_now_ms = int(time.time() * 1000)
+        countdown_start_ms = server_now_ms + 1500
+
+        for idx in range(2):
+            opp_idx = 1 - idx
+            combat_me = room["combat"]["players"][idx]
+            combat_opp = room["combat"]["players"][opp_idx]
+            round_start_msg = {
+                "type": "round_start",
+                "round_number": next_round,
+                "round_wins": current_round_wins,
+                "server_now_ms": server_now_ms,
+                "countdown_start_ms": countdown_start_ms,
+                "me": {"hp": combat_me["hp"], "max_hp": combat_me["max_hp"], "special_gauge": 0},
+                "opponent": {"hp": combat_opp["hp"], "max_hp": combat_opp["max_hp"], "special_gauge": 0},
+            }
+            if players[idx]["ws"]:
+                try:
+                    await players[idx]["ws"].send_json(round_start_msg)
+                except Exception:
+                    pass
+
+        logger.info(
+            "round_start sent room=%s round=%s round_wins=%s countdown_start_ms=%s",
+            room_code, next_round, current_round_wins, countdown_start_ms,
+        )
+
 AFK_TIMEOUT_SECONDS = 30  # seconds of inactivity before AFK timeout
 AFK_CHECK_INTERVAL = 3    # seconds between AFK checks when no messages arrive
 
@@ -195,7 +259,7 @@ async def websocket_game(websocket: WebSocket, room_code: str):
                     action,
                 )
 
-            if msg_type == "player_action" and action and "combat" in room:
+            if msg_type == "player_action" and action and "combat" in room and not room["combat"].get("ko_processed", False):
                 result = process_action(room["combat"], player_index, action)
                 logger.info(
                     "player_action room=%s player_index=%s action=%s damage=%s blocked=%s ko=%s",
@@ -238,84 +302,38 @@ async def websocket_game(websocket: WebSocket, room_code: str):
 
                 if result["ko"]:
                     winner_idx = result["ko_winner"]
-                    loser_idx = 1 - winner_idx
                     room["round_wins"][winner_idx] += 1
-                    current_round_wins = room["round_wins"]
+                    current_round_wins = list(room["round_wins"])
+                    current_round = room["current_round"]
+
+                    # Block further action processing until next round
+                    room["combat"]["ko_processed"] = True
 
                     logger.info(
-                        "round_ko room=%s winner_index=%s round_wins=%s",
+                        "round_ko room=%s winner_index=%s round_wins=%s game_over=%s",
                         room_code,
                         winner_idx,
                         current_round_wins,
+                        current_round_wins[winner_idx] >= 2,
                     )
 
-                    if current_round_wins[winner_idx] >= 2:
-                        # Best-of-3 winner decided → send game_end
-                        duration = int(time.time() - room["combat"]["start_time"])
-                        game_end_msg = {
-                            "type": "game_end",
-                            "winner_index": winner_idx,
-                            "winner_name": players[winner_idx]["name"],
-                            "loser_name": players[loser_idx]["name"],
-                            "duration_seconds": duration,
-                            "round_wins": current_round_wins,
-                        }
-                        for idx in range(2):
-                            if players[idx]["ws"]:
-                                await players[idx]["ws"].send_json(game_end_msg)
-                        room["status"] = "finished"
-                        logger.info(
-                            "game_end room=%s winner_index=%s duration=%s",
-                            room_code,
-                            winner_idx,
-                            duration,
-                        )
-                    else:
-                        # Start next round — reset HP/gauge for both fighters
-                        room["current_round"] += 1
-                        for i, combat_player in enumerate(room["combat"]["players"]):
-                            stats = get_character_stats(players[i]["character_id"])
-                            combat_player["hp"] = stats["hp"]
-                            combat_player["max_hp"] = stats["max_hp"]
-                            combat_player["special_gauge"] = 0
-                            combat_player["last_action"] = None
-                            combat_player["last_action_time"] = 0.0
-                            combat_player["blocking"] = False
+                    # Send round_end immediately so clients can show the win overlay
+                    round_end_msg = {
+                        "type": "round_end",
+                        "round_number": current_round,
+                        "winner_index": winner_idx,
+                        "winner_name": players[winner_idx]["name"],
+                        "round_wins": current_round_wins,
+                        "game_over": current_round_wins[winner_idx] >= 2,
+                    }
+                    for idx in range(2):
+                        if players[idx]["ws"]:
+                            await players[idx]["ws"].send_json(round_end_msg)
 
-                        server_now_ms = int(time.time() * 1000)
-                        countdown_start_ms = server_now_ms + 2000
-
-                        for idx in range(2):
-                            opp_idx = 1 - idx
-                            combat_me = room["combat"]["players"][idx]
-                            combat_opp = room["combat"]["players"][opp_idx]
-                            round_start_msg = {
-                                "type": "round_start",
-                                "round_number": room["current_round"],
-                                "round_wins": current_round_wins,
-                                "server_now_ms": server_now_ms,
-                                "countdown_start_ms": countdown_start_ms,
-                                "me": {
-                                    "hp": combat_me["hp"],
-                                    "max_hp": combat_me["max_hp"],
-                                    "special_gauge": 0,
-                                },
-                                "opponent": {
-                                    "hp": combat_opp["hp"],
-                                    "max_hp": combat_opp["max_hp"],
-                                    "special_gauge": 0,
-                                },
-                            }
-                            if players[idx]["ws"]:
-                                await players[idx]["ws"].send_json(round_start_msg)
-
-                        logger.info(
-                            "round_start sent room=%s round=%s round_wins=%s countdown_start_ms=%s",
-                            room_code,
-                            room["current_round"],
-                            current_round_wins,
-                            countdown_start_ms,
-                        )
+                    # After a delay send either round_start or game_end
+                    asyncio.create_task(
+                        _handle_post_round(room, room_code, players, winner_idx, current_round, current_round_wins)
+                    )
 
             else:
                 if players[opponent_index]["ws"]:
