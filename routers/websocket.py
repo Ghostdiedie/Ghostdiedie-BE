@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import time
@@ -8,6 +9,9 @@ from models.schemas import WSGameStart, WSOpponentLeft, WSType, PlayerState
 
 router = APIRouter()
 logger = logging.getLogger("ghostdiedie.websocket")
+
+AFK_TIMEOUT_SECONDS = 5   # seconds of inactivity before AFK timeout (testing: 5, production: 30)
+AFK_CHECK_INTERVAL = 3    # seconds between AFK checks when no messages arrive
 
 
 def _to_player_state(player: dict, combat_player: dict = None) -> PlayerState:
@@ -73,6 +77,7 @@ async def websocket_game(websocket: WebSocket, room_code: str):
     if players[opponent_index]["ws"] is not None and "combat" not in room:
         room["combat"] = init_combat_state(players)
         room["combat"]["start_time"] = time.time()
+        room["last_activity"] = [time.time(), time.time()]
         room["status"] = "playing"
         server_now_ms = int(time.time() * 1000)
         countdown_start_ms = server_now_ms + 1500
@@ -97,10 +102,42 @@ async def websocket_game(websocket: WebSocket, room_code: str):
             players[1]["character_id"],
         )
 
+    afk_triggered = False
     try:
         last_position_log_at = 0.0
         while True:
-            data = await websocket.receive_text()
+            # Receive with timeout for AFK detection
+            try:
+                data = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=AFK_CHECK_INTERVAL,
+                )
+            except asyncio.TimeoutError:
+                data = None
+
+            # ── AFK check (only during active combat) ──
+            if "combat" in room and "last_activity" in room:
+                now_check = time.time()
+                afk_idx = None
+                for idx in range(2):
+                    if now_check - room["last_activity"][idx] > AFK_TIMEOUT_SECONDS:
+                        afk_idx = idx
+                        break
+                if afk_idx is not None:
+                    afk_msg = {"type": "afk_timeout", "afk_player_index": afk_idx}
+                    for p_idx in range(2):
+                        if players[p_idx]["ws"]:
+                            try:
+                                await players[p_idx]["ws"].send_json(afk_msg)
+                            except Exception:
+                                pass
+                    room["status"] = "finished"
+                    afk_triggered = True
+                    logger.info("afk_timeout room=%s afk_player=%s", room_code, afk_idx)
+                    break
+
+            if data is None:
+                continue
 
             try:
                 message = json.loads(data)
@@ -110,6 +147,15 @@ async def websocket_game(websocket: WebSocket, room_code: str):
             msg_type = message.get("type")
             action = message.get("action")
             now = time.time()
+
+            # Update AFK activity timestamp
+            if "last_activity" in room:
+                if msg_type == "player_action":
+                    room["last_activity"][player_index] = now
+                elif msg_type == "position_sync" and message.get("isMoving"):
+                    room["last_activity"][player_index] = now
+                elif msg_type == "attack_anim":
+                    room["last_activity"][player_index] = now
 
             if msg_type == "position_sync":
                 if now - last_position_log_at >= 1.0:
@@ -205,13 +251,24 @@ async def websocket_game(websocket: WebSocket, room_code: str):
                     await players[opponent_index]["ws"].send_json(message)
 
     except WebSocketDisconnect:
-        players[player_index]["ws"] = None
-        room["status"] = "finished"
         logger.info("ws disconnected room=%s player_index=%s", room_code, player_index)
 
+    # ── Cleanup ──
+    players[player_index]["ws"] = None
+    if afk_triggered:
         if players[opponent_index]["ws"]:
-            msg = WSOpponentLeft(type=WSType.OPPONENT_LEFT)
-            await players[opponent_index]["ws"].send_json(msg.model_dump())
+            try:
+                await players[opponent_index]["ws"].close(code=4002, reason="AFK timeout")
+            except Exception:
+                pass
+    else:
+        room["status"] = "finished"
+        if players[opponent_index]["ws"]:
+            try:
+                msg = WSOpponentLeft(type=WSType.OPPONENT_LEFT)
+                await players[opponent_index]["ws"].send_json(msg.model_dump())
+            except Exception:
+                pass
 
-        if all(p["ws"] is None for p in players):
-            del rooms[room_code]
+    if room_code in rooms and all(p["ws"] is None for p in players):
+        del rooms[room_code]
