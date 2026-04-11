@@ -42,6 +42,13 @@ async def websocket_game(websocket: WebSocket, room_code: str):
         await websocket.close(code=4001, reason="Both players must confirm before connecting")
         return
 
+    if not (
+        room["owner"].get("character_selected")
+        and room["guest"].get("character_selected")
+    ):
+        await websocket.close(code=4001, reason="Both players must select a character before connecting")
+        return
+
     await websocket.accept()
     logger.info("ws accepted room=%s", room_code)
 
@@ -66,6 +73,8 @@ async def websocket_game(websocket: WebSocket, room_code: str):
         room["combat"] = init_combat_state(players)
         room["combat"]["start_time"] = time.time()
         room["status"] = "playing"
+        server_now_ms = int(time.time() * 1000)
+        countdown_start_ms = server_now_ms + 1500
 
         for idx in range(2):
             opp_idx = 1 - idx
@@ -74,6 +83,8 @@ async def websocket_game(websocket: WebSocket, room_code: str):
             msg = WSGameStart(
                 type=WSType.GAME_START,
                 player_index=idx,
+                server_now_ms=server_now_ms,
+                countdown_start_ms=countdown_start_ms,
                 me=_to_player_state(players[idx], combat_me),
                 opponent=_to_player_state(players[opp_idx], combat_opp),
             )
@@ -86,6 +97,7 @@ async def websocket_game(websocket: WebSocket, room_code: str):
         )
 
     try:
+        last_position_log_at = 0.0
         while True:
             data = await websocket.receive_text()
 
@@ -96,6 +108,28 @@ async def websocket_game(websocket: WebSocket, room_code: str):
 
             msg_type = message.get("type")
             action = message.get("action")
+            now = time.time()
+
+            if msg_type == "position_sync":
+                if now - last_position_log_at >= 1.0:
+                    pos = message.get("position")
+                    logger.info(
+                        "recv room=%s player_index=%s type=position_sync position=%s isMoving=%s movingBackward=%s",
+                        room_code,
+                        player_index,
+                        pos,
+                        message.get("isMoving"),
+                        message.get("movingBackward"),
+                    )
+                    last_position_log_at = now
+            else:
+                logger.info(
+                    "recv room=%s player_index=%s type=%s action=%s",
+                    room_code,
+                    player_index,
+                    msg_type,
+                    action,
+                )
 
             if msg_type == "player_action" and action and "combat" in room:
                 result = process_action(room["combat"], player_index, action)
@@ -165,7 +199,8 @@ async def websocket_game(websocket: WebSocket, room_code: str):
 
             else:
                 if players[opponent_index]["ws"]:
-                    logger.info("relay room=%s player_index=%s type=%s", room_code, player_index, msg_type)
+                    if msg_type not in {"position_sync", "webrtc_ice"}:
+                        logger.info("relay room=%s player_index=%s type=%s", room_code, player_index, msg_type)
                     await players[opponent_index]["ws"].send_json(message)
 
     except WebSocketDisconnect:

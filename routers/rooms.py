@@ -37,6 +37,7 @@ def create_room(
         "owner": {
             **user,
             "character_id": character_id,
+            "character_selected": False,
             "confirmed": False,
             "ws": None,
         },
@@ -78,6 +79,7 @@ def join_room(
     room["guest"] = {
         **user,
         "character_id": character_id,
+        "character_selected": False,
         "confirmed": False,
         "ws": None,
     }
@@ -147,15 +149,24 @@ def set_room_character(
 
     if room["owner"]["user_id"] == user_id:
         room["owner"]["character_id"] = character_id
+        room["owner"]["character_selected"] = True
     elif room["guest"] and room["guest"]["user_id"] == user_id:
         room["guest"]["character_id"] = character_id
+        room["guest"]["character_selected"] = True
     else:
         raise HTTPException(status_code=403, detail="You are not in this room")
     logger.info("room character updated code=%s user=%s character_id=%s", code, user_id, character_id)
 
+    both_characters_selected = bool(
+        room["guest"]
+        and room["owner"].get("character_selected")
+        and room["guest"].get("character_selected")
+    )
+
     return {
         "updated": True,
         "character_id": character_id,
+        "both_characters_selected": both_characters_selected,
     }
 
 
@@ -181,12 +192,16 @@ def get_room_status(
         "status": room["status"],
         "owner": _user_info(room["owner"], "owner"),
         "both_confirmed": False,
+        "both_characters_selected": False,
         "expires_in": remaining,
     }
 
     if room["guest"]:
         result["guest"] = _user_info(room["guest"], "guest")
         result["both_confirmed"] = room["owner"]["confirmed"] and room["guest"]["confirmed"]
+        result["both_characters_selected"] = bool(
+            room["owner"].get("character_selected") and room["guest"].get("character_selected")
+        )
     else:
         result["guest"] = None
 

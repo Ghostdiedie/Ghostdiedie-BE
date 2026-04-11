@@ -84,6 +84,8 @@ class WSGameStart(BaseModel):
     """Sent when both players finish connecting over WebSocket."""
     type: Literal[WSType.GAME_START]
     player_index: int       # 0 = P1 (left), 1 = P2 (right)
+    server_now_ms: int
+    countdown_start_ms: int
     me: PlayerState
     opponent: PlayerState
 
