@@ -11,6 +11,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -79,6 +80,10 @@ class RoomJoin(BaseModel):
 @app.get("/")
 def root():
     return {"status": "ok", "service": "ghostdiedie-club"}
+
+@app.get("/test")
+def test_page():
+    return FileResponse("test_ws.html")
 
 @app.get("/api/characters")
 def get_characters(_: str = Depends(verify_api_key)):
