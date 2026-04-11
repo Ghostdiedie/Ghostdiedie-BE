@@ -1,5 +1,6 @@
 import base64
 import io
+import logging
 import uuid
 
 import cv2
@@ -9,6 +10,7 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 
 router = APIRouter(tags=["Face"])
+logger = logging.getLogger("ghostdiedie.face")
 
 # In-memory store: face_id → face_url (base64 data URL)
 faces: dict[str, str] = {}
@@ -99,5 +101,13 @@ async def process_face(file: UploadFile = File(...)):
 
     face_id = uuid.uuid4().hex[:12]
     faces[face_id] = data_url
+    logger.info(
+        "processed face face_id=%s filename=%s content_type=%s size_bytes=%s detected=%s",
+        face_id,
+        file.filename,
+        file.content_type,
+        len(raw),
+        face_rect is not None,
+    )
 
     return JSONResponse({"face_id": face_id, "face_url": data_url})

@@ -2,11 +2,17 @@
 Ghostdiedie Club Backend
 FastAPI + Supabase + WebSocket
 """
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from routers import characters, face, matches, rooms, users, websocket
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 
 app = FastAPI(
     title="Ghostdiedie Club API",

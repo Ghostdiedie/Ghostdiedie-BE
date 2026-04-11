@@ -1,10 +1,12 @@
 import time
+import logging
 from fastapi import APIRouter, HTTPException, Depends, Query
 from core.auth import verify_api_key
 from services.room_manager import rooms, generate_room_code, ROOM_EXPIRE_SECONDS
 from services.user_manager import get_user
 
 router = APIRouter(tags=["Rooms"])
+logger = logging.getLogger("ghostdiedie.rooms")
 
 
 def _user_info(player: dict, role: str) -> dict:
@@ -40,6 +42,7 @@ def create_room(
         },
         "guest": None,
     }
+    logger.info("room created code=%s owner=%s character_id=%s", code, user_id, character_id)
 
     return {
         "code": code,
@@ -79,6 +82,7 @@ def join_room(
         "ws": None,
     }
     room["status"] = "ready"
+    logger.info("room joined code=%s guest=%s character_id=%s", code, user_id, character_id)
 
     return {
         "success": True,
@@ -114,10 +118,44 @@ def confirm_room(
 
     if both_confirmed:
         room["status"] = "confirmed"
+    logger.info(
+        "room confirm code=%s user=%s owner_confirmed=%s guest_confirmed=%s",
+        code,
+        user_id,
+        room["owner"]["confirmed"],
+        room["guest"]["confirmed"],
+    )
 
     return {
         "confirmed": True,
         "both_confirmed": both_confirmed,
+    }
+
+
+@router.get("/api/room/character")
+def set_room_character(
+    code: str = Query(...),
+    user_id: str = Query(...),
+    character_id: int = Query(...),
+    _: str = Depends(verify_api_key),
+):
+    """Update the selected character before WebSocket game start."""
+    if code not in rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    room = rooms[code]
+
+    if room["owner"]["user_id"] == user_id:
+        room["owner"]["character_id"] = character_id
+    elif room["guest"] and room["guest"]["user_id"] == user_id:
+        room["guest"]["character_id"] = character_id
+    else:
+        raise HTTPException(status_code=403, detail="You are not in this room")
+    logger.info("room character updated code=%s user=%s character_id=%s", code, user_id, character_id)
+
+    return {
+        "updated": True,
+        "character_id": character_id,
     }
 
 
