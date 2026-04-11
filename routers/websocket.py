@@ -34,16 +34,24 @@ def _get_players_list(room: dict) -> list[dict]:
 @router.websocket("/ws/{room_code}")
 async def websocket_game(websocket: WebSocket, room_code: str):
     if room_code not in rooms:
+        logger.warning("ws rejected room=%s reason=room_not_found", room_code)
         await websocket.close(code=4004, reason="Room not found")
         return
 
     room = rooms[room_code]
 
     if room["guest"] is None:
+        logger.warning("ws rejected room=%s reason=room_not_full", room_code)
         await websocket.close(code=4001, reason="Room not full yet")
         return
 
     if not (room["owner"]["confirmed"] and room["guest"]["confirmed"]):
+        logger.warning(
+            "ws rejected room=%s reason=not_confirmed owner_confirmed=%s guest_confirmed=%s",
+            room_code,
+            room["owner"]["confirmed"],
+            room["guest"]["confirmed"],
+        )
         await websocket.close(code=4001, reason="Both players must confirm before connecting")
         return
 
@@ -51,6 +59,12 @@ async def websocket_game(websocket: WebSocket, room_code: str):
         room["owner"].get("character_selected")
         and room["guest"].get("character_selected")
     ):
+        logger.warning(
+            "ws rejected room=%s reason=character_not_selected owner_selected=%s guest_selected=%s",
+            room_code,
+            room["owner"].get("character_selected"),
+            room["guest"].get("character_selected"),
+        )
         await websocket.close(code=4001, reason="Both players must select a character before connecting")
         return
 
@@ -67,6 +81,7 @@ async def websocket_game(websocket: WebSocket, room_code: str):
             break
 
     if player_index is None:
+        logger.warning("ws rejected room=%s reason=room_already_has_two_sockets", room_code)
         await websocket.close(code=4003, reason="Room is full")
         return
 

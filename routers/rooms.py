@@ -37,7 +37,10 @@ def create_room(
         "owner": {
             **user,
             "character_id": character_id,
-            "character_selected": False,
+            # Treat the initial character choice as a valid selection so
+            # WebSocket connect can proceed even if the client skips the
+            # later explicit /api/room/character call.
+            "character_selected": True,
             "confirmed": False,
             "ws": None,
         },
@@ -79,7 +82,8 @@ def join_room(
     room["guest"] = {
         **user,
         "character_id": character_id,
-        "character_selected": False,
+        # The guest also arrives with a character_id, so mark it selected.
+        "character_selected": True,
         "confirmed": False,
         "ws": None,
     }
