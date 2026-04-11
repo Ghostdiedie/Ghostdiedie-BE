@@ -233,7 +233,7 @@ async def websocket_game(websocket: WebSocket, room_code: str):
             if "last_activity" in room:
                 if msg_type == "player_action":
                     room["last_activity"][player_index] = now
-                elif msg_type == "position_sync" and message.get("isMoving"):
+                elif msg_type == "position_sync":
                     room["last_activity"][player_index] = now
                 elif msg_type == "attack_anim":
                     room["last_activity"][player_index] = now
