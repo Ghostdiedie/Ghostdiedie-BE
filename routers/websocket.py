@@ -191,7 +191,9 @@ async def websocket_game(websocket: WebSocket, room_code: str, user_id: str = No
             if p["user_id"] == user_id:
                 if p["ws"] is not None:
                     logger.warning(
-                        "ws rejected room=%s reason=already_connected user_id=%s", room_code, user_id
+                        "ws rejected room=%s reason=already_connected user_id=%s",
+                        room_code,
+                        user_id,
                     )
                     await websocket.close(code=4003, reason="Already connected")
                     return
@@ -343,7 +345,10 @@ async def websocket_game(websocket: WebSocket, room_code: str, user_id: str = No
                 if room.get("fight_start_time") and now < room["fight_start_time"]:
                     logger.info(
                         "player_action EARLY room=%s player_index=%s action=%s remaining=%.2fs",
-                        room_code, player_index, action, room["fight_start_time"] - now,
+                        room_code,
+                        player_index,
+                        action,
+                        room["fight_start_time"] - now,
                     )
                     continue
 
