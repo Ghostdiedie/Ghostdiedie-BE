@@ -10,11 +10,16 @@ from models.schemas import WSGameStart, WSOpponentLeft, WSType, PlayerState
 router = APIRouter()
 logger = logging.getLogger("ghostdiedie.websocket")
 
-# Maximum 3-D distance between fighters for an attack to land.
-# FIGHTER_MIN_DISTANCE on the frontend is 1.8, so players can be at most
-# ~1.8 units apart when touching. We add generous buffer for position-sync
-# lag (~50 ms at 20 Hz) and network latency.
-MAX_ATTACK_RANGE = 4.5
+# Per-action attack range (max distance for the hit to land).
+# FIGHTER_MIN_DISTANCE on the frontend is 1.8 (touching distance).
+# Values include a small buffer for position-sync lag.
+ATTACK_RANGES = {
+    "left punch":  2.3,
+    "right punch": 2.3,
+    "kick":        3.0,
+    "headbutt":    1.9,
+    "special":     2.5,
+}
 
 # Countdown duration must match the frontend constants:
 # 5 steps × 1000 ms + 1400 ms for FIGHT! display
@@ -338,20 +343,15 @@ async def websocket_game(websocket: WebSocket, room_code: str):
                         room["positions"][player_index],
                         room["positions"][opponent_index],
                     )
-                    if dist > MAX_ATTACK_RANGE and action in (
-                        "right punch",
-                        "left punch",
-                        "kick",
-                        "headbutt",
-                        "special",
-                    ):
+                    max_range = ATTACK_RANGES.get(action)
+                    if max_range is not None and dist > max_range:
                         logger.info(
                             "player_action MISSED room=%s player_index=%s action=%s dist=%.2f max=%.2f",
                             room_code,
                             player_index,
                             action,
                             dist,
-                            MAX_ATTACK_RANGE,
+                            max_range,
                         )
                         # Whiff — inform attacker, no effect on defender'
                         combat_p = room["combat"]["players"]
