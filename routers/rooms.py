@@ -11,12 +11,15 @@ logger = logging.getLogger("ghostdiedie.rooms")
 
 def _user_info(player: dict, role: str) -> dict:
     """Return clean user info for response."""
-    return {
+    info = {
         "user_id": player["user_id"],
         "name": player["name"],
         "profile_image_url": player["profile_image_url"],
         "role": role,  # "owner" or "guest"
     }
+    if player.get("arena_key"):
+        info["arena_key"] = player["arena_key"]
+    return info
 
 
 @router.get("/api/room/create")
@@ -34,13 +37,14 @@ def create_room(
     rooms[code] = {
         "status": "waiting",
         "created_at": time.time(),
+        "arena_key": None,
         "owner": {
             **user,
             "character_id": character_id,
-            # Treat the initial character choice as a valid selection so
-            # WebSocket connect can proceed even if the client skips the
-            # later explicit /api/room/character call.
-            "character_selected": True,
+            "arena_key": None,
+            # Character choice becomes valid only after the explicit
+            # character-select step.
+            "character_selected": False,
             "confirmed": False,
             "ws": None,
         },
@@ -82,8 +86,8 @@ def join_room(
     room["guest"] = {
         **user,
         "character_id": character_id,
-        # The guest also arrives with a character_id, so mark it selected.
-        "character_selected": True,
+        "arena_key": None,
+        "character_selected": False,
         "confirmed": False,
         "ws": None,
     }
@@ -135,6 +139,32 @@ def confirm_room(
     return {
         "confirmed": True,
         "both_confirmed": both_confirmed,
+    }
+
+
+@router.get("/api/room/arena")
+def set_room_arena(
+    code: str = Query(...),
+    user_id: str = Query(...),
+    arena_key: str = Query(...),
+    _: str = Depends(verify_api_key),
+):
+    """Owner selects the arena. Guest receives it via room/status polling."""
+    if code not in rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    room = rooms[code]
+
+    if room["owner"]["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Only the room owner can choose the arena")
+
+    room["arena_key"] = arena_key
+    room["owner"]["arena_key"] = arena_key
+    logger.info("room arena updated code=%s owner=%s arena_key=%s", code, user_id, arena_key)
+
+    return {
+        "updated": True,
+        "arena_key": arena_key,
     }
 
 
@@ -194,6 +224,7 @@ def get_room_status(
     result = {
         "code": code,
         "status": room["status"],
+        "arena_key": room.get("arena_key"),
         "owner": _user_info(room["owner"], "owner"),
         "both_confirmed": False,
         "both_characters_selected": False,
