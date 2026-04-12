@@ -5,6 +5,7 @@ Available attacks (matches frontend CV detection):
   - left punch   : base damage
   - right punch  : base damage
   - kick         : 1.3x damage, slightly longer range feel
+  - headbutt     : 1.15x damage, short forward burst
   - special      : 3x damage, costs full gauge (100)
 
 All characters share identical stats — balance is in the gameplay, not the roster.
@@ -16,6 +17,7 @@ import time
 BASE_HP          = 200
 BASE_PUNCH       = 8     # left punch / right punch damage
 KICK_MULTIPLIER  = 1.3   # kick hits harder than a punch
+HEADBUTT_MULTIPLIER = 1.15
 SPECIAL_MULTIPLIER = 3.0  # special = big hit, gauge cost required
 SPECIAL_GAUGE_COST = 100  # must fill the whole gauge to use special
 MAX_GAUGE        = 100
@@ -28,7 +30,7 @@ GAUGE_PER_HIT         = 12    # gauge gained on a successful attack
 GAUGE_PER_BLOCK       = 8     # gauge gained on blocking a hit
 
 # Recognised attack strings sent from the frontend
-ATTACK_ACTIONS = ("right punch", "left punch", "kick", "special")
+ATTACK_ACTIONS = ("right punch", "left punch", "kick", "headbutt", "special")
 
 
 def get_character_stats(character_id: int) -> dict:
@@ -113,14 +115,17 @@ def process_action(combat: dict, player_index: int, action: str) -> dict:
         attacker["last_action_time"] = now
         return result
 
-    # Handle attacks: "left punch" / "right punch" → base, "kick" → 1.3x, "special" → 3x
+    # Handle attacks: punches → base, kick/headbutt → boosted, special → 3x
     attacker["blocking"] = False
     base_damage = attacker["attack"]   # BASE_PUNCH for everyone
     is_special = action == "special"
     is_kick = action == "kick"
+    is_headbutt = action == "headbutt"
 
     if is_kick:
         base_damage = int(base_damage * KICK_MULTIPLIER)
+    elif is_headbutt:
+        base_damage = int(base_damage * HEADBUTT_MULTIPLIER)
 
     if is_special:
         if attacker["special_gauge"] < SPECIAL_GAUGE_COST:

@@ -17,6 +17,7 @@ class ActionType(str, Enum):
     R_PUNCH = "right punch"
     L_PUNCH = "left punch"
     KICK    = "kick"
+    HEADBUTT = "headbutt"
     JUMP    = "jump"
     WALK    = "walk"
     BLOCK   = "block"

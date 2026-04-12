@@ -342,6 +342,7 @@ async def websocket_game(websocket: WebSocket, room_code: str):
                         "right punch",
                         "left punch",
                         "kick",
+                        "headbutt",
                         "special",
                     ):
                         logger.info(
