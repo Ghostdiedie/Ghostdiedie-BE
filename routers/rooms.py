@@ -16,6 +16,7 @@ def _user_info(player: dict, role: str) -> dict:
         "name": player["name"],
         "profile_image_url": player["profile_image_url"],
         "role": role,  # "owner" or "guest"
+        "calibration_ready": bool(player.get("calibration_ready")),
     }
     if player.get("arena_key"):
         info["arena_key"] = player["arena_key"]
@@ -45,6 +46,7 @@ def create_room(
             # Character choice becomes valid only after the explicit
             # character-select step.
             "character_selected": False,
+            "calibration_ready": False,
             "confirmed": False,
             "ws": None,
         },
@@ -88,6 +90,7 @@ def join_room(
         "character_id": character_id,
         "arena_key": None,
         "character_selected": False,
+        "calibration_ready": False,
         "confirmed": False,
         "ws": None,
     }
@@ -184,9 +187,11 @@ def set_room_character(
     if room["owner"]["user_id"] == user_id:
         room["owner"]["character_id"] = character_id
         room["owner"]["character_selected"] = True
+        room["owner"]["calibration_ready"] = False
     elif room["guest"] and room["guest"]["user_id"] == user_id:
         room["guest"]["character_id"] = character_id
         room["guest"]["character_selected"] = True
+        room["guest"]["calibration_ready"] = False
     else:
         raise HTTPException(status_code=403, detail="You are not in this room")
     logger.info("room character updated code=%s user=%s character_id=%s", code, user_id, character_id)
@@ -201,6 +206,51 @@ def set_room_character(
         "updated": True,
         "character_id": character_id,
         "both_characters_selected": both_characters_selected,
+    }
+
+
+@router.get("/api/room/calibration")
+def set_room_calibration(
+    code: str = Query(...),
+    user_id: str = Query(...),
+    ready: bool = Query(True),
+    _: str = Depends(verify_api_key),
+):
+    """Mark a player as calibration-ready after local CV setup."""
+    if code not in rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    room = rooms[code]
+
+    if not room.get("guest"):
+        raise HTTPException(status_code=400, detail="Waiting for opponent")
+
+    if room["owner"]["user_id"] == user_id:
+        room["owner"]["calibration_ready"] = ready
+    elif room["guest"]["user_id"] == user_id:
+        room["guest"]["calibration_ready"] = ready
+    else:
+        raise HTTPException(status_code=403, detail="You are not in this room")
+
+    both_calibrated = bool(
+        room["owner"].get("calibration_ready") and room["guest"].get("calibration_ready")
+    )
+    if both_calibrated:
+        room["status"] = "calibrated"
+
+    logger.info(
+        "room calibration updated code=%s user=%s ready=%s owner_ready=%s guest_ready=%s",
+        code,
+        user_id,
+        ready,
+        room["owner"].get("calibration_ready"),
+        room["guest"].get("calibration_ready"),
+    )
+
+    return {
+        "updated": True,
+        "ready": ready,
+        "both_calibrated": both_calibrated,
     }
 
 
@@ -228,6 +278,7 @@ def get_room_status(
         "owner": _user_info(room["owner"], "owner"),
         "both_confirmed": False,
         "both_characters_selected": False,
+        "both_calibrated": False,
         "expires_in": remaining,
     }
 
@@ -236,6 +287,9 @@ def get_room_status(
         result["both_confirmed"] = room["owner"]["confirmed"] and room["guest"]["confirmed"]
         result["both_characters_selected"] = bool(
             room["owner"].get("character_selected") and room["guest"].get("character_selected")
+        )
+        result["both_calibrated"] = bool(
+            room["owner"].get("calibration_ready") and room["guest"].get("calibration_ready")
         )
     else:
         result["guest"] = None

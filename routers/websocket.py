@@ -183,6 +183,21 @@ async def websocket_game(websocket: WebSocket, room_code: str, user_id: str = No
         )
         return
 
+    if not (
+        room["owner"].get("calibration_ready")
+        and room["guest"].get("calibration_ready")
+    ):
+        logger.warning(
+            "ws rejected room=%s reason=calibration_not_ready owner_ready=%s guest_ready=%s",
+            room_code,
+            room["owner"].get("calibration_ready"),
+            room["guest"].get("calibration_ready"),
+        )
+        await websocket.close(
+            code=4001, reason="Both players must complete calibration before connecting"
+        )
+        return
+
     await websocket.accept()
     logger.info("ws accepted room=%s user_id=%s", room_code, user_id)
 
