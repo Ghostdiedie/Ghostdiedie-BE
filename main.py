@@ -26,46 +26,46 @@ Ghostdiedie Club — motion-based fighting game backend
 
 ```
 [Lobby Page]
-  1. 사진 촬영/선택
+  1. Capture or choose a photo
      POST /api/face (file) → { face_id, face_url }
-     → 프론트에 face_id, face_url 저장
+     → Store face_id and face_url on the frontend
 
-  2. 이름 입력 후 Create/Join 클릭
+  2. Enter a name and click Create or Join
      GET /api/user/register?name=...&face_id=... → { user_id, name, profile_image_url }
-     → 프론트에 user_id 저장
+     → Store user_id on the frontend
 
 [Create Room Page]
-  3. 방 생성
+  3. Create a room
      GET /api/room/create?user_id=...&character_id=... → { code, owner, expires_in }
-     → 8자리 코드 화면에 표시
+     → Show the 8-digit code on screen
 
-  4. 상대 대기 (1.5초 간격 폴링)
+  4. Wait for the opponent (poll every 1.5 seconds)
      GET /api/room/status?code=... → { status, owner, guest, both_confirmed }
-     → guest가 null이 아니면 상대 입장 완료
+     → If guest is not null, the opponent has joined
 
-  5. Confirm 버튼 클릭
+  5. Click the Confirm button
      GET /api/room/confirm?code=...&user_id=... → { confirmed, both_confirmed }
-     → both_confirmed가 false면 계속 room/status 폴링
+     → If both_confirmed is false, keep polling room/status
 
-  6. 양쪽 confirm 완료 → WebSocket 연결
+  6. Both players confirm → connect WebSocket
      wss://{host}/ws/{code}
-     → 양쪽 연결 시 서버가 game_start 전송 → 게임 화면으로 이동
+     → Once both sides connect, the server sends game_start → move to the game screen
 
 [Join Room Page]
-  3. 8자리 코드 입력 후 Join
+  3. Enter the 8-digit code and join
      GET /api/room/join?code=...&user_id=...&character_id=...
      → { success, code, owner, guest }
-     → owner 정보(이름, 사진) 화면에 표시
+     → Show the owner's information (name, photo) on screen
 
-  4. Confirm 버튼 클릭
+  4. Click the Confirm button
      GET /api/room/confirm?code=...&user_id=... → { confirmed, both_confirmed }
-     → both_confirmed false면 room/status 폴링
+     → If both_confirmed is false, keep polling room/status
 
-  5. 양쪽 confirm 완료 → WebSocket 연결
-     → game_start → 게임 화면
+  5. Both players confirm → connect WebSocket
+     → game_start → game screen
 
 [Game Page]
-  WebSocket 메시지로 실시간 전투
+  Real-time combat over WebSocket messages
   Client → Server: { type: "player_action", action: "..." }
   Server → Client: action_result / hit_received / game_end / opponent_left
 ```
@@ -78,7 +78,7 @@ Ghostdiedie Club — motion-based fighting game backend
 
 | Method | Endpoint | Params | Response |
 |--------|----------|--------|----------|
-| `POST` | `/api/face` | `file` (multipart image) | `{ face_id, face_url }` — 256x256 원형 크롭 PNG (base64) |
+| `POST` | `/api/face` | `file` (multipart image) | `{ face_id, face_url }` — 256x256 circular crop PNG (base64) |
 
 ### User
 
@@ -97,9 +97,9 @@ Ghostdiedie Club — motion-based fighting game backend
 
 **Room status flow**: `waiting` → `ready` → `confirmed` → `playing` → `finished`
 
-**owner/guest 응답 형식**:
+**owner/guest response format**:
 ```json
-{ "user_id": "abc123", "name": "홍길동", "profile_image_url": "data:image/png;base64,...", "role": "owner" }
+{ "user_id": "abc123", "name": "John Doe", "profile_image_url": "data:image/png;base64,...", "role": "owner" }
 ```
 
 ### Characters
@@ -124,17 +124,17 @@ Ghostdiedie Club — motion-based fighting game backend
 
 ### `wss://{host}/ws/{room_code}`
 
-**연결 조건**: 양쪽 모두 HTTP `/api/room/confirm` 완료 후에만 연결 가능 (미확인 시 4001 close)
+**Connection rule**: both players must complete HTTP `/api/room/confirm` before connecting (otherwise close 4001)
 
 ### Server → Client
 
 | Type | When | Payload |
 |------|------|---------|
-| `game_start` | 양쪽 WS 연결 완료 | `{ player_index, me: PlayerState, opponent: PlayerState }` |
-| `action_result` | 내가 공격 | `{ action, damage, first_hit, blocked, is_special, my_hp, opponent_hp, my_gauge, opponent_gauge }` |
-| `hit_received` | 상대가 공격 | `{ action, damage, first_hit, blocked, is_special, my_hp, opponent_hp, my_gauge, opponent_gauge }` |
-| `game_end` | KO 발생 | `{ winner_index, winner_name, loser_name, duration_seconds }` |
-| `opponent_left` | 상대 연결 끊김 | `{}` |
+| `game_start` | Both WS connections are established | `{ player_index, me: PlayerState, opponent: PlayerState }` |
+| `action_result` | I attack | `{ action, damage, first_hit, blocked, is_special, my_hp, opponent_hp, my_gauge, opponent_gauge }` |
+| `hit_received` | The opponent attacks | `{ action, damage, first_hit, blocked, is_special, my_hp, opponent_hp, my_gauge, opponent_gauge }` |
+| `game_end` | KO occurs | `{ winner_index, winner_name, loser_name, duration_seconds }` |
+| `opponent_left` | Opponent disconnects | `{}` |
 
 ### Client → Server
 
@@ -142,30 +142,30 @@ Ghostdiedie Club — motion-based fighting game backend
 |------|---------|
 | `player_action` | `{ type: "player_action", action: "right punch" \\| "left punch" \\| "kick" \\| "block" \\| "special" }` |
 
-### PlayerState (game_start에 포함)
+### PlayerState (included in game_start)
 
 ```json
-{ "name": "홍길동", "character_id": 1, "profile_image_url": "data:...", "hp": 100, "special_gauge": 0 }
+{ "name": "John Doe", "character_id": 1, "profile_image_url": "data:...", "hp": 100, "special_gauge": 0 }
 ```
 
 ### Combat System
 
 | Action | Effect |
 |--------|--------|
-| `right punch` / `left punch` | Base damage (캐릭터 attack) |
+| `right punch` / `left punch` | Base damage (character attack) |
 | `kick` | 1.2x damage |
-| `block` | 방어 (피해 50% 감소, 게이지 +5) |
-| `special` | 필살기 (게이지 100 소모, 3x damage) |
-| `jump` / `walk` | 이동 (피해 없음) |
+| `block` | Guard (50% damage reduction, gauge +5) |
+| `special` | Special move (costs 100 gauge, 3x damage) |
+| `jump` / `walk` | Movement (no damage) |
 
-- **First-hit bonus**: 상대가 0.3초 내 공격 안 했으면 1.5x
-- **Gauge charge**: 공격 시 +15, 방어 시 +5
+- **First-hit bonus**: 1.5x if the opponent has not attacked within 0.3 seconds
+- **Gauge charge**: +15 on attack, +5 on guard
 
 ---
 
 ## Auth
 
-모든 HTTP 엔드포인트는 `X-API-Key` 헤더 필요 (`POST /api/face` 포함, WebSocket 제외)
+All HTTP endpoints require the `X-API-Key` header (`POST /api/face` included, WebSocket excluded)
 """,
 )
 
