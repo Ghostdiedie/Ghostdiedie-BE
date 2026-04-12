@@ -138,7 +138,7 @@ def _get_players_list(room: dict) -> list[dict]:
 
 
 @router.websocket("/ws/{room_code}")
-async def websocket_game(websocket: WebSocket, room_code: str):
+async def websocket_game(websocket: WebSocket, room_code: str, user_id: str = None):
     if room_code not in rooms:
         logger.warning("ws rejected room=%s reason=room_not_found", room_code)
         await websocket.close(code=4004, reason="Room not found")
@@ -179,22 +179,37 @@ async def websocket_game(websocket: WebSocket, room_code: str):
         return
 
     await websocket.accept()
-    logger.info("ws accepted room=%s", room_code)
+    logger.info("ws accepted room=%s user_id=%s", room_code, user_id)
 
-    # Determine which player is connecting (owner=0, guest=1)
+    # Determine which player is connecting by user_id (owner=0, guest=1).
+    # Falling back to first empty slot only when user_id is absent (legacy).
     players = _get_players_list(room)
     player_index = None
-    for i, p in enumerate(players):
-        if p["ws"] is None:
-            p["ws"] = websocket
-            player_index = i
-            break
+
+    if user_id:
+        for i, p in enumerate(players):
+            if p["user_id"] == user_id:
+                if p["ws"] is not None:
+                    logger.warning(
+                        "ws rejected room=%s reason=already_connected user_id=%s", room_code, user_id
+                    )
+                    await websocket.close(code=4003, reason="Already connected")
+                    return
+                p["ws"] = websocket
+                player_index = i
+                break
+    else:
+        for i, p in enumerate(players):
+            if p["ws"] is None:
+                p["ws"] = websocket
+                player_index = i
+                break
 
     if player_index is None:
         logger.warning(
-            "ws rejected room=%s reason=room_already_has_two_sockets", room_code
+            "ws rejected room=%s reason=user_not_in_room user_id=%s", room_code, user_id
         )
-        await websocket.close(code=4003, reason="Room is full")
+        await websocket.close(code=4003, reason="User not in room")
         return
 
     opponent_index = 1 - player_index
